@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Solicitação {{ solicitacao.numsol }}{% endblock %}
+{% block content %}
+
+<div class="header-bar">
+  <div class="brand">
+    <div class="brand-mark">RT</div>
+    <div>
+      <h1>Detalhe da solicitação</h1>
+      <p class="subtitle">
+        <a href="{{ url_for('painel') }}">&larr; voltar ao painel</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="detalhe-card">
+  <div class="detalhe-top">
+    <div>
+      <p class="field-label">Solicitação de peças — O.S. nº</p>
+      <p style="font-size:1.6rem; font-weight:800; margin:0.2rem 0 0; font-family:var(--font-mono); letter-spacing:-0.01em; color:var(--navy-900);">{{ solicitacao.numped }}</p>
+    </div>
+    <div style="text-align:right;">
+      <p class="field-label">Filial</p>
+      <p style="font-size:1.1rem; font-weight:700; margin:0.2rem 0 0; color:var(--navy-900);">{{ solicitacao.codfil }}</p>
+    </div>
+    <div style="text-align:right;">
+      <p class="field-label">Solicitação</p>
+      <p style="font-size:1.1rem; font-weight:700; margin:0.2rem 0 0; font-family:var(--font-mono); color:var(--navy-900);">{{ solicitacao.numsol }}</p>
+    </div>
+    <div style="text-align:right;">
+      <p class="field-label">{{ solicitacao.data_hora }}</p>
+      <span class="status-pill" style="background:var(--amber-soft); color:var(--st-separacao); border-color:var(--amber-border); margin-top:0.3rem;">
+        <span class="col-dot" style="width:7px; height:7px; background:var(--st-separacao);"></span>
+        Em separação
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="info-cards">
+  <div class="info-card">
+    <div class="info-card-head">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      Cliente
+    </div>
+    <div class="info-card-value">{{ solicitacao.cliente or '—' }}</div>
+    <div class="info-card-sub">{{ solicitacao.cidade or 'Cidade não informada' }}</div>
+  </div>
+
+  <div class="info-card">
+    <div class="info-card-head">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><path d="M20 8v6"></path><path d="M23 11h-6"></path></svg>
+      Solicitante
+    </div>
+    <div class="info-card-value">{{ solicitacao.solicitante or '—' }}</div>
+    <div class="info-card-sub">Separador: {{ solicitacao.separador or '—' }}</div>
+  </div>
+
+  <div class="info-card">
+    <div class="info-card-head">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+      Observação da solicitação
+    </div>
+    <div class="info-card-value" style="font-weight:500;">{{ solicitacao.observacao or '—' }}</div>
+  </div>
+
+  <div class="info-card">
+    <div class="info-card-head">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+      Observação do pedido
+    </div>
+    <div class="info-card-value" style="font-weight:500;">{{ solicitacao.observacao_pedido or '—' }}</div>
+  </div>
+</div>
+
+<p class="section-title">Itens solicitados e saldo por depósito</p>
+
+<div class="table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>Produto</th>
+        <th>Produto 2</th>
+        <th>Descrição (produto)</th>
+        <th>Descrição (solicitação)</th>
+        <th>Marca</th>
+        <th>Endereço</th>
+        <th>Qtd. solic.</th>
+        <th>Saldo por depósito</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in itens %}
+      <tr>
+        <td class="mono">{{ item.codpro1 }}</td>
+        <td class="mono" style="color:var(--text-faint);">{{ item.codpro2 }}</td>
+        <td style="white-space:normal;">{{ item.descricao }}</td>
+        <td style="white-space:normal; color:var(--text-dim);">{{ item.descricao_item or '—' }}</td>
+        <td>{{ item.marca }}</td>
+        <td class="mono">{{ item.endereco or '—' }}</td>
+        <td style="text-align:center;">{{ item.qtd_solic }}</td>
+        <td>
+          {% for dep in item.saldos %}
+            <span class="badge {{ 'badge-ok' if dep.saldo > 0 else 'badge-zero' }}">
+              {{ dep.deposito }} {{ dep.saldo }}
+            </span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="note">
+  Depósitos exibidos variam conforme a empresa e filial do item.
+</p>
+
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Usuários e perfis{% endblock %}
+{% block content %}
+
+<div class="header-bar">
+  <div class="brand">
+    <div class="brand-mark">RT</div>
+    <div>
+      <h1>Usuários e perfis</h1>
+      <p class="subtitle">Acesso restrito à gerência · {{ usuarios|length }} usuários ativos no Sapiens</p>
+    </div>
+  </div>
+  <a href="{{ url_for('painel') }}" class="btn-trocar">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+    Voltar ao painel
+  </a>
+</div>
+
+<div class="table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>Usuário (Sapiens)</th>
+        <th>Perfil</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in usuarios %}
+      <tr>
+        <td>
+          <div class="user-cell">
+            <span class="avatar">{{ u.nome[:2]|upper }}</span>
+            <div>
+              <div style="font-weight:600;">{{ u.nome }}</div>
+              <div class="user-code">código {{ u.usuario }}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <form method="POST" action="{{ url_for('salvar_perfil') }}" style="display:flex; align-items:center;">
+            <input type="hidden" name="usuario" value="{{ u.usuario }}">
+            <input type="hidden" name="nome" value="{{ u.nome }}">
+            <span class="perfil-pill-select">
+              <select name="perfil" onchange="this.form.submit()">
+                <option value="" {{ 'selected' if not u.perfil else '' }}>Sem perfil</option>
+                <option value="G" {{ 'selected' if u.perfil == 'G' else '' }}>Gerência</option>
+                <option value="B" {{ 'selected' if u.perfil == 'B' else '' }}>Boqueta</option>
+                <option value="U" {{ 'selected' if u.perfil == 'U' else '' }}>Usinagem</option>
+              </select>
+            </span>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="note">Cada usuário tem exatamente um perfil fixo.</p>
+
+{% endblock %}

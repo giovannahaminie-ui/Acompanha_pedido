@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<div class="hero-screen">
+  <div class="hero-inner">
+
+    <div class="hero-copy">
+      <span class="eyebrow">Retificadora Tiête</span>
+      <h1>Acompanhamento de solicitações de peças, em tempo real.</h1>
+      <p class="lead">
+        Painel único para solicitar, separar e conferir peças entre o balcão,
+        a boqueta e a usinagem — direto dos dados do Sapiens.
+      </p>
+      <div class="hero-points">
+        <div class="hero-point">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Visão ao vivo do que está solicitado, em separação e atendido
+        </div>
+        <div class="hero-point">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Acesso simples: só o seu código do Sapiens, sem senha pra decorar
+        </div>
+        <div class="hero-point">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Pensado pra ficar num telão, legível de longe
+        </div>
+      </div>
+    </div>
+
+    <div class="auth-card">
+      <div class="card-brand">RT</div>
+      <p class="card-title">Entrar</p>
+      <p class="card-subtitle">Use o seu código de usuário do Sapiens</p>
+
+      {% if erro %}
+        <div class="alert">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+          {{ erro }}
+        </div>
+      {% endif %}
+
+      <form method="POST">
+        <div class="field">
+          <label for="usuario">Código (matrícula/crachá)</label>
+          <input type="number" id="usuario" name="usuario" placeholder="Ex: 129" required autofocus>
+        </div>
+        <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">
+          Entrar
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+      </form>
+      <p class="note" style="text-align:center; margin-top:1.1rem;">Acesso pelo código de usuário do Sapiens</p>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

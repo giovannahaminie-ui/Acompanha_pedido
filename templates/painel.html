@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Painel{% endblock %}
+
+{% block content %}
+<div class="premium-screen-wrapper">
+  <div class="premium-dashboard">
+
+    <!-- CABEÇALHO -->
+    <div class="header-bar">
+      <div class="header-left">
+        <div class="brand-mark">RT</div>
+        <div class="header-titles">
+          <h1>Acompanhamento de solicitações de peças</h1>
+          <div class="header-context">
+            <span class="context-chip"><span class="live-dot"></span>{{ contexto }}</span>
+            <a href="{{ url_for('selecao') }}" class="btn-trocar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"></polyline>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+              </svg>
+              Trocar seleção
+            </a>
+          </div>
+        </div>
+      </div>
+      <div class="clock">
+        <span>{{ data_hoje }}</span>
+        <strong id="relogio">{{ hora_agora }}</strong>
+      </div>
+    </div>
+
+    <!-- ÁREA DAS COLUNAS -->
+    <div class="painel-grid">
+
+      <!-- COLUNA: SOLICITADO -->
+      <div class="painel-col">
+        <div class="col-header col-solicitado">
+          <span class="col-title"><span class="col-dot"></span>Solicitado</span>
+          <span class="count">{{ solicitados|length }}</span>
+        </div>
+        {% if solicitados %}
+        <div class="table-scroll">
+          <table class="clickable">
+            <thead>
+              <tr>
+                <th style="width:20%;">Data/hora</th>
+                <th style="width:13%;">Fil.</th>
+                <th style="width:16%;">O.S.</th>
+                <th style="width:16%;">Solic.</th>
+                <th style="width:35%;">Solicitante</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in solicitados %}
+              <tr ondblclick="assumirSolicitacao('{{ item.codemp }}','{{ item.codfil }}','{{ item.numsol }}')" title="Duplo clique para assumir">
+                <td><span class="mono">{{ item.data_hora }}</span></td>
+                <td>{{ item.codfil }}</td>
+                <td><span class="mono">{{ item.numped }}</span></td>
+                <td><span class="mono">{{ item.numsol }}</span></td>
+                <td>{{ item.solicitante }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+          <span class="empty-icon">✓</span>
+          Nenhuma solicitação pendente
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- COLUNA: EM SEPARAÇÃO -->
+      <div class="painel-col">
+        <div class="col-header col-separacao">
+          <span class="col-title"><span class="col-dot"></span>Em separação</span>
+          <span class="count">{{ em_separacao|length }}</span>
+        </div>
+        {% if em_separacao %}
+        <div class="table-scroll">
+          <table class="clickable">
+            <thead>
+              <tr>
+                <th>Data/hora</th>
+                <th>Fil.</th>
+                <th>O.S.</th>
+                <th>Solic.</th>
+                <th>Separador</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in em_separacao %}
+              <tr data-href="{{ url_for('detalhe_solicitacao', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol) }}"
+                  onclick="window.location.href=this.dataset.href" title="Ver detalhe da solicitação">
+                <td><span class="mono">{{ item.data_hora }}</span></td>
+                <td>{{ item.codfil }}</td>
+                <td><span class="mono">{{ item.numped }}</span></td>
+                <td><span class="mono">{{ item.numsol }}</span></td>
+                <td>{{ item.separador }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+          <span class="empty-icon">–</span>
+          Nada em separação agora
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- COLUNA: ATENDIDO -->
+      <div class="painel-col">
+        <div class="col-header col-atendido">
+          <span class="col-title"><span class="col-dot"></span>Atendido / parcial</span>
+          <span class="count">{{ atendidos|length }}</span>
+        </div>
+        {% if atendidos %}
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Data/hora</th>
+                <th>Fil.</th>
+                <th>O.S.</th>
+                <th>Solic.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in atendidos %}
+              <tr>
+                <td><span class="mono">{{ item.data_hora }}</span></td>
+                <td>{{ item.codfil }}</td>
+                <td><span class="mono">{{ item.numped }}</span></td>
+                <td><span class="mono">{{ item.numsol }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+          <span class="empty-icon">·</span>
+          Nenhum atendimento no período
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // Relógio simples no cabeçalho
+  function atualizarRelogio() {
+    const agora = new Date();
+    document.getElementById('relogio').textContent =
+      agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  setInterval(atualizarRelogio, 30000);
+
+  function assumirSolicitacao(codemp, codfil, numsol) {
+    const url = `/solicitacao/assumir/${codemp}/${codfil}/${numsol}`;
+    window.location.href = url;
+  }
+</script>
+{% endblock %}

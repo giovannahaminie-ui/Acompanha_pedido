@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Seleção{% endblock %}
+{% block content %}
+<div class="hero-screen">
+  <div class="hero-inner">
+
+    <div class="hero-copy">
+      <span class="eyebrow">Passo 2 de 2</span>
+      <h1>Escolha o que você quer acompanhar.</h1>
+      <p class="lead">
+        Filtre por empresa, filial, tipo de serviço e etapa — o painel se
+        ajusta na hora, e você pode trocar essa seleção quando quiser sem
+        precisar logar de novo.
+      </p>
+      <div class="hero-points">
+        <div class="hero-point">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Só a empresa é obrigatória — o resto é opcional
+        </div>
+        <div class="hero-point">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Dá pra trocar o filtro a qualquer momento pelo botão "Trocar seleção"
+        </div>
+      </div>
+    </div>
+
+    <div class="auth-card">
+      <div class="card-brand">RT</div>
+      <p class="card-title">Acompanhamento de solicitações</p>
+      <p class="card-subtitle">Selecione os parâmetros desejados para acessar o painel</p>
+
+      <form method="POST">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 1.25rem;">
+
+          <!-- Empresa -->
+          <div class="field">
+            <label>Empresa</label>
+            <input type="hidden" name="empresa" id="empresa" value="{{ empresas[0][0] if empresas else '' }}">
+            <div class="ux-select-wrapper">
+              <div class="ux-select-trigger">
+                <span class="ux-selected-text">
+                  {% if empresas %}{{ empresas[0][0] }} — {{ empresas[0][1] }}{% else %}Selecione{% endif %}
+                </span>
+                <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </div>
+              <div class="ux-options-menu">
+                {% for cod, nome in empresas %}
+                  <div class="ux-option-item {% if loop.first %}selected{% endif %}" data-value="{{ cod }}">{{ cod }} — {{ nome }}</div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Filial -->
+          <div class="field">
+            <label>Filial</label>
+            <input type="hidden" name="filial" id="filial" value="">
+            <div class="ux-select-wrapper">
+              <div class="ux-select-trigger">
+                <span class="ux-selected-text">Todas as filiais</span>
+                <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </div>
+              <div class="ux-options-menu">
+                <div class="ux-option-item selected" data-value="">Todas as filiais</div>
+                {% for cod, nome in filiais %}
+                  <div class="ux-option-item" data-value="{{ cod }}">{{ cod }} — {{ nome }}</div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Tipo de Serviço -->
+          <div class="field">
+            <label>Tipo de serviço</label>
+            <input type="hidden" name="tipo_servico" id="tipo_servico" value="">
+            <div class="ux-select-wrapper">
+              <div class="ux-select-trigger">
+                <span class="ux-selected-text">Todos</span>
+                <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </div>
+              <div class="ux-options-menu">
+                <div class="ux-option-item selected" data-value="">Todos</div>
+                {% for cod, nome in tipos_servico %}
+                  <div class="ux-option-item" data-value="{{ cod }}">{{ nome }}</div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Etapa -->
+          <div class="field">
+            <label>Etapa</label>
+            <input type="hidden" name="etapa" id="etapa" value="">
+            <div class="ux-select-wrapper">
+              <div class="ux-select-trigger">
+                <span class="ux-selected-text">Todas</span>
+                <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </div>
+              <div class="ux-options-menu">
+                <div class="ux-option-item selected" data-value="">Todas</div>
+                {% for cod, nome in etapas %}
+                  <div class="ux-option-item" data-value="{{ cod }}">{{ nome }}</div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:0.5rem;">
+          Abrir acompanhamento
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const wrappers = document.querySelectorAll('.ux-select-wrapper');
+
+    wrappers.forEach(wrapper => {
+      const trigger = wrapper.querySelector('.ux-select-trigger');
+      const options = wrapper.querySelectorAll('.ux-option-item');
+      const selectedText = wrapper.querySelector('.ux-selected-text');
+      const hiddenInput = wrapper.parentElement.querySelector('input[type="hidden"]');
+
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = wrapper.classList.contains('open');
+        wrappers.forEach(w => w.classList.remove('open'));
+        if (!isOpen) wrapper.classList.add('open');
+      });
+
+      options.forEach(option => {
+        option.addEventListener('click', (e) => {
+          e.stopPropagation();
+          options.forEach(opt => opt.classList.remove('selected'));
+          option.classList.add('selected');
+          selectedText.textContent = option.textContent.trim();
+          hiddenInput.value = option.getAttribute('data-value');
+          wrapper.classList.remove('open');
+        });
+      });
+    });
+
+    document.addEventListener('click', () => {
+      wrappers.forEach(wrapper => wrapper.classList.remove('open'));
+    });
+  });
+</script>
+{% endblock %}

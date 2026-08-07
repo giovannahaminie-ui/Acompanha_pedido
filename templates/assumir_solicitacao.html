@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Assumir solicitação{% endblock %}
+{% block content %}
+<div class="hero-screen">
+  <div class="hero-inner">
+
+    <div class="hero-copy">
+      <span class="eyebrow">O.S. {{ numped }} · Solicitação {{ numsol }}</span>
+      <h1>Confirme seu código pra assumir essa separação.</h1>
+      <p class="lead">
+        Ao confirmar, a solicitação sai de "Solicitado" e entra em
+        "Em separação" com o seu código como separador.
+      </p>
+    </div>
+
+    <div class="auth-card">
+      <div class="card-brand">RT</div>
+      <p class="card-title">Assumir solicitação</p>
+      <p class="card-subtitle">O.S. {{ numped }} — solicitação {{ numsol }}</p>
+
+      {% if erro %}
+        <div class="alert">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+          {{ erro }}
+        </div>
+      {% endif %}
+
+      <div class="field">
+        <label>Solicitado por</label>
+        <input type="text" value="{{ solicitante }}" disabled>
+      </div>
+
+      <form method="POST">
+        <div class="field">
+          <label for="usuario">Seu código (matrícula/crachá)</label>
+          <input type="number" id="usuario" name="usuario" placeholder="Ex: 129" required autofocus>
+        </div>
+        <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">
+          Confirmar separação
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </button>
+      </form>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
