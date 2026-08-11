@@ -7,13 +7,32 @@
     <div class="brand-mark">RT</div>
     <div>
       <h1>Usuários e perfis</h1>
-      <p class="subtitle">Acesso restrito à gerência · {{ usuarios|length }} usuários ativos no Sapiens</p>
+      <p class="subtitle">Acesso restrito à gerência · mostrando <span id="contagemVisivel">{{ usuarios|length }}</span> de {{ usuarios|length }} usuários ativos no Sapiens</p>
     </div>
   </div>
   <a href="{{ url_for('painel') }}" class="btn-trocar">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
     Voltar ao painel
   </a>
+</div>
+
+<div class="filtro-perfil-row">
+  <label>Filtrar por nível</label>
+  <span class="filtro-chip active" data-filter="__all__">
+    Todos <span class="filtro-count">{{ usuarios|length }}</span>
+  </span>
+  <span class="filtro-chip" data-filter="G" style="color:var(--perfil-g);">
+    Gerência <span class="filtro-count">{{ usuarios|selectattr('perfil', 'eq', 'G')|list|length }}</span>
+  </span>
+  <span class="filtro-chip" data-filter="B" style="color:var(--perfil-b);">
+    Boqueta <span class="filtro-count">{{ usuarios|selectattr('perfil', 'eq', 'B')|list|length }}</span>
+  </span>
+  <span class="filtro-chip" data-filter="U" style="color:var(--perfil-u);">
+    Usinagem <span class="filtro-count">{{ usuarios|selectattr('perfil', 'eq', 'U')|list|length }}</span>
+  </span>
+  <span class="filtro-chip" data-filter="__none__" style="color:var(--perfil-none);">
+    Sem perfil <span class="filtro-count">{{ usuarios|rejectattr('perfil')|list|length }}</span>
+  </span>
 </div>
 
 <div class="table-card">
@@ -26,13 +45,18 @@
     </thead>
     <tbody>
       {% for u in usuarios %}
-      <tr>
+      <tr data-perfil="{{ u.perfil or '' }}">
         <td>
           <div class="user-cell">
             <span class="avatar">{{ u.nome[:2]|upper }}</span>
             <div>
-              <div style="font-weight:600;">{{ u.nome }}</div>
-              <div class="user-code">código {{ u.usuario }}</div>
+              <div class="user-name {{ 'perfil-' + u.perfil if u.perfil else '' }}">{{ u.nome }}</div>
+              <div class="user-code" style="display:flex; align-items:center; gap:0.5rem; margin-top:0.15rem;">
+                código {{ u.usuario }}
+                <span class="perfil-tag perfil-tag-{{ u.perfil if u.perfil else 'none' }}">
+                  {{ {'G': 'Gerência', 'B': 'Boqueta', 'U': 'Usinagem'}.get(u.perfil, 'Sem perfil') }}
+                </span>
+              </div>
             </div>
           </div>
         </td>
@@ -41,7 +65,7 @@
             <input type="hidden" name="usuario" value="{{ u.usuario }}">
             <input type="hidden" name="nome" value="{{ u.nome }}">
             <span class="perfil-pill-select">
-              <select name="perfil" onchange="this.form.submit()">
+              <select name="perfil" onchange="atualizarEtiqueta(this)">
                 <option value="" {{ 'selected' if not u.perfil else '' }}>Sem perfil</option>
                 <option value="G" {{ 'selected' if u.perfil == 'G' else '' }}>Gerência</option>
                 <option value="B" {{ 'selected' if u.perfil == 'B' else '' }}>Boqueta</option>
@@ -57,5 +81,51 @@
 </div>
 
 <p class="note">Cada usuário tem exatamente um perfil fixo.</p>
+
+<script>
+  const LABELS_PERFIL = { G: 'Gerência', B: 'Boqueta', U: 'Usinagem', '': 'Sem perfil' };
+
+  // Atualiza a etiqueta e a cor do nome na hora, antes de recarregar a página
+  function atualizarEtiqueta(select) {
+    const perfil = select.value;
+    const row = select.closest('tr');
+    const nomeEl = row.querySelector('.user-name');
+    const tagEl = row.querySelector('.perfil-tag');
+
+    nomeEl.className = 'user-name' + (perfil ? ' perfil-' + perfil : '');
+    tagEl.className = 'perfil-tag perfil-tag-' + (perfil || 'none');
+    tagEl.textContent = LABELS_PERFIL[perfil];
+    row.dataset.perfil = perfil;
+
+    select.form.submit();
+  }
+
+  // Filtro por nível (chips) - só mostra/esconde, sem recarregar
+  document.addEventListener('DOMContentLoaded', function () {
+    const chips = document.querySelectorAll('.filtro-chip');
+    const rows = document.querySelectorAll('.table-card tbody tr');
+    const contagem = document.getElementById('contagemVisivel');
+
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        chips.forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+
+        const filtro = chip.dataset.filter;
+        let visiveis = 0;
+        rows.forEach(row => {
+          const perfilLinha = row.dataset.perfil;
+          let mostrar;
+          if (filtro === '__all__') mostrar = true;
+          else if (filtro === '__none__') mostrar = (perfilLinha === '');
+          else mostrar = (perfilLinha === filtro);
+          row.style.display = mostrar ? '' : 'none';
+          if (mostrar) visiveis++;
+        });
+        if (contagem) contagem.textContent = visiveis;
+      });
+    });
+  });
+</script>
 
 {% endblock %}

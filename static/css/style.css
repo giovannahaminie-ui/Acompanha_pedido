@@ -35,6 +35,12 @@
   --st-separacao: #f59e0b;
   --st-atendido: #10b981;
 
+  /* cores por nível de perfil (admin de usuários) */
+  --perfil-g: #7c3aed;
+  --perfil-b: #2563eb;
+  --perfil-u: #059669;
+  --perfil-none: #64748b;
+
   --amber: #b45309;
   --amber-soft: #fef3e2;
   --amber-border: #f6dfb5;
@@ -192,7 +198,7 @@ button:active, .btn:active { transform: translateY(0); }
 .btn-primary:active { transform: translateY(1px); box-shadow: 0 2px 10px rgba(220, 38, 38, 0.3); }
 
 /* --- inputs / selects nativos --- */
-input, select {
+input, select, textarea {
   font-family: inherit; font-size: 0.95rem; color: var(--navy-900);
   padding: 0.7rem 0.85rem; border-radius: var(--radius-sm);
   border: 1.5px solid var(--border); background: var(--white);
@@ -200,9 +206,22 @@ input, select {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   appearance: none;
 }
-input::placeholder { color: var(--text-faint); }
-input:focus, select:focus { outline: none; border-color: var(--red-500); box-shadow: 0 0 0 4px var(--red-soft); }
-input:disabled { color: var(--text-mute); background: var(--bg-soft); }
+textarea { resize: vertical; min-height: 7rem; }
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--red-500); box-shadow: 0 0 0 4px var(--red-soft); }
+input:disabled, textarea:disabled { color: var(--text-mute); background: var(--bg-soft); }
+
+/* --- botões de ação por item (segunda tela) --- */
+/* flex-wrap: os 5 ícones (cancelar/observação/equivalentes/inserir/trocar)
+   quebram em 2 linhas em vez de forçar a coluna a esticar a tabela toda */
+.item-acoes { display: flex; flex-wrap: wrap; gap: 3px; align-content: flex-start; }
+.item-acoes .btn-icone {
+  padding: 0.35rem 0.45rem; margin: 0; font-size: 0.78rem;
+  border-radius: var(--radius-sm);
+}
+.item-acoes .btn-icone.tem-observacao { color: var(--red-600); border-color: var(--red-border); background: var(--red-soft); }
+.item-acoes .btn-icone:disabled { color: var(--text-faint); background: var(--bg-soft); cursor: not-allowed; }
+.item-acoes .btn-icone:disabled:hover { transform: none; box-shadow: none; }
 
 select {
   background-image: linear-gradient(45deg, transparent 50%, var(--text-mute) 50%),
@@ -382,8 +401,47 @@ table.clickable tbody tr:hover td { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03); 
 
 .note { font-size: 0.8rem; color: var(--text-faint); margin: 0.9rem 0 0; padding: 0 0.2rem; }
 
-.avatar { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; font-size: 0.74rem; font-weight: 700; color: #fff; background: var(--navy-900); flex: none; }
+.avatar { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; font-size: 0.74rem; font-weight: 700; color: #fff; background: var(--navy-900); flex: none; transition: background 0.15s ease; }
 .user-cell { display: flex; align-items: center; gap: 0.65rem; }
+
+/* --- etiqueta de perfil (admin de usuários) --- */
+.perfil-tag {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em;
+  padding: 0.15rem 0.6rem; border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.perfil-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.perfil-tag-G { color: var(--perfil-g); background: rgba(124, 58, 237, 0.1); border-color: rgba(124, 58, 237, 0.25); }
+.perfil-tag-B { color: var(--perfil-b); background: rgba(37, 99, 235, 0.1); border-color: rgba(37, 99, 235, 0.25); }
+.perfil-tag-U { color: var(--perfil-u); background: rgba(5, 150, 105, 0.1); border-color: rgba(5, 150, 105, 0.25); }
+.perfil-tag-none { color: var(--perfil-none); background: var(--bg-soft-2); border-color: var(--border); }
+
+.user-cell .user-name { font-weight: 600; transition: color 0.15s ease; }
+.user-cell .user-name.perfil-G { color: var(--perfil-g); }
+.user-cell .user-name.perfil-B { color: var(--perfil-b); }
+.user-cell .user-name.perfil-U { color: var(--perfil-u); }
+
+/* --- filtro por nível (admin de usuários) --- */
+.filtro-perfil-row {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.filtro-perfil-row label {
+  margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.03em;
+  text-transform: uppercase; color: var(--text-mute);
+}
+.filtro-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 0.82rem; font-weight: 600; color: var(--text-dim);
+  background: var(--white); border: 1.5px solid var(--border);
+  padding: 0.4rem 0.9rem; border-radius: 999px; cursor: pointer;
+  transition: all 0.15s ease;
+}
+.filtro-chip:hover { border-color: var(--border-strong); background: var(--bg-soft); }
+.filtro-chip.active { color: #fff; background: var(--navy-900); border-color: var(--navy-900); }
+.filtro-chip .filtro-count { font-family: var(--font-mono); opacity: 0.75; }
 .user-code { font-family: var(--font-mono); color: var(--text-faint); font-size: 0.78rem; }
 
 .perfil-pill-select { position: relative; display: inline-block; min-width: 150px; }
@@ -399,7 +457,36 @@ table.clickable tbody tr:hover td { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03); 
 .section-title { font-size: 0.82rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-dim); margin: 0 0 0.75rem; }
 
 .table-card { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow-x: auto; box-shadow: var(--shadow-sm); background: var(--white); }
-.table-card table { font-size: 0.9rem; }
+.table-card table { font-size: 0.9rem; table-layout: fixed; }
+.table-card table th { position: static; }
+/* colunas mais enxutas - sem isso, table-layout:auto deixa o navegador
+   esticar a tabela pelo conteúdo em vez de respeitar a largura do card,
+   o que forçava rolagem lateral (16 colunas + 5 ícones de ação por linha) */
+.table-card table th, .table-card table td { padding: 0.5rem 0.55rem; font-size: 0.8rem; }
+.table-card table td.mono { font-size: 0.74rem; padding: 2px 4px; white-space: normal; word-break: break-all; }
+
+/* --- lista de itens equivalentes --- */
+.equiv-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 1.25rem;
+  padding: 1rem 1.4rem; border-bottom: 1px solid var(--border);
+  transition: background 0.15s ease;
+}
+.equiv-row:last-child { border-bottom: none; }
+.equiv-row:hover { background: var(--bg-soft); }
+.equiv-left { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+.equiv-code { font-family: var(--font-mono); font-weight: 800; color: var(--red-600); font-size: 0.95rem; flex: none; }
+.equiv-info { min-width: 0; }
+.equiv-title { font-weight: 700; color: var(--navy-900); font-size: 0.95rem; }
+.equiv-subtitle { font-size: 0.8rem; color: var(--text-mute); margin-top: 2px; }
+.equiv-right { text-align: right; flex: none; }
+.equiv-price { font-weight: 800; color: var(--emerald); font-size: 1rem; font-family: var(--font-mono); }
+.equiv-stock-card {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  margin-top: 0.4rem; font-size: 0.76rem; font-weight: 700; font-family: var(--font-mono);
+  color: var(--emerald); background: var(--emerald-soft); border: 1px solid var(--emerald-border);
+  padding: 0.2rem 0.65rem; border-radius: 999px;
+}
+.equiv-stock-card.sem-saldo { color: var(--text-mute); background: var(--bg-soft-2); border-color: var(--border); font-weight: 600; }
 
 @keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 .header-bar, .painel-col, .auth-card, .card, .detalhe-card, .table-card, .info-card { animation: fade-up 0.3s ease both; }

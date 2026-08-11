@@ -20,7 +20,7 @@ def get_conn():
 
 
 def init_db():
-    """Cria a tabela se ainda não existir. Chamar uma vez ao subir o app."""
+    """Cria as tabelas se ainda não existirem. Chamar uma vez ao subir o app."""
     conn = get_conn()
     conn.execute(
         """
@@ -28,6 +28,20 @@ def init_db():
             usuario TEXT PRIMARY KEY,   -- login do Sapiens, ex: 'cesar.souza'
             nome    TEXT,               -- nome de exibição
             perfil  TEXT                -- 'G', 'B', 'U' ou NULL (sem perfil)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS comentarios_item (
+            codemp      INTEGER,
+            codfil      INTEGER,
+            numsol      INTEGER,
+            codpro      TEXT,
+            comentario  TEXT,
+            usuario     TEXT,   -- quem escreveu o comentário
+            data        TEXT,   -- data/hora do último comentário
+            PRIMARY KEY (codemp, codfil, numsol, codpro)
         )
         """
     )
@@ -76,6 +90,49 @@ def upsert_usuario(usuario: str, nome: str = None):
             WHERE excluded.nome IS NOT NULL
         """,
         (usuario, nome),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_comentario(codemp: int, codfil: int, numsol: int, codpro: str):
+    """Retorna dict {comentario, usuario, data} do item, ou None se não houver."""
+    conn = get_conn()
+    row = conn.execute(
+        """
+        SELECT comentario, usuario, data FROM comentarios_item
+        WHERE codemp=? AND codfil=? AND numsol=? AND codpro=?
+        """,
+        (codemp, codfil, numsol, str(codpro)),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row and row["comentario"] else None
+
+
+def get_comentarios_solicitacao(codemp: int, codfil: int, numsol: int):
+    """Retorna {codpro: comentario} de todos os itens comentados dessa solicitação -
+    usado pra saber, na listagem, quais itens já têm comentário."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT codpro, comentario FROM comentarios_item WHERE codemp=? AND codfil=? AND numsol=?",
+        (codemp, codfil, numsol),
+    ).fetchall()
+    conn.close()
+    return {r["codpro"]: r["comentario"] for r in rows if r["comentario"]}
+
+
+def salvar_comentario(codemp: int, codfil: int, numsol: int, codpro: str, comentario: str, usuario: str):
+    """Guarda localmente (não existe campo pra isso no T120SIT do Sapiens ainda)."""
+    from datetime import datetime
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO comentarios_item (codemp, codfil, numsol, codpro, comentario, usuario, data)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(codemp, codfil, numsol, codpro) DO UPDATE SET
+            comentario = excluded.comentario, usuario = excluded.usuario, data = excluded.data
+        """,
+        (codemp, codfil, numsol, str(codpro), comentario.strip(), usuario, datetime.now().strftime("%d/%m/%Y %H:%M")),
     )
     conn.commit()
     conn.close()

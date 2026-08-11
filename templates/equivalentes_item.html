@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Itens equivalentes{% endblock %}
+{% block content %}
+
+<div class="header-bar">
+  <div class="brand">
+    <div class="brand-mark">RT</div>
+    <div>
+      <h1>Itens equivalentes</h1>
+      <p class="subtitle">
+        Produto {{ codpro }} — solicitação {{ numsol }} ·
+        <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}">&larr; voltar à solicitação</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="table-card">
+  {% for eq in equivalentes %}
+  <div class="equiv-row">
+    <div class="equiv-left">
+      <span class="equiv-code">{{ eq.codigo }}</span>
+      <div class="equiv-info">
+        <div class="equiv-title">{{ eq.descricao }}</div>
+        <div class="equiv-subtitle">{{ [eq.marca, eq.derivacao] | select | join(' · ') or '—' }}</div>
+      </div>
+    </div>
+    <div class="equiv-right">
+      <div class="equiv-price">—</div>
+      <div class="equiv-stock-card {{ 'sem-saldo' if not eq.saldos else '' }}">
+        {% for dep in eq.saldos %}{{ dep.deposito }}:{{ dep.saldo }}{{ ' · ' if not loop.last }}{% else %}sem saldo{% endfor %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state" style="padding:2rem 1rem;">
+    Nenhum equivalente cadastrado para esse produto.
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Trocar item{% endblock %}
+{% block content %}
+<div class="hero-screen">
+  <div class="hero-inner" style="grid-template-columns: 1fr;">
+
+    <div class="auth-card" style="max-width:600px;">
+      <div class="card-brand">RT</div>
+      <p class="card-title">Trocar item</p>
+      <p class="card-subtitle">
+        Solicitação {{ numsol }} — O.S. {{ item.numped }} — produto substituído {{ item.codpro }}
+      </p>
+
+      {% if erro %}
+        <div class="alert">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+          {{ erro }}
+        </div>
+      {% endif %}
+
+      {% if not item_pedido %}
+        <div class="alert">Item ainda não está vinculado a uma linha do pedido (seqIpd) — não é possível trocar.</div>
+      {% else %}
+        <p class="field-label">Situação atual no pedido</p>
+        <div class="info-cards" style="margin-bottom:1.2rem;">
+          <div class="info-card"><div class="info-card-head">Aberta</div><div class="info-card-value">{{ item_pedido.qtd_aberta }}</div></div>
+          <div class="info-card"><div class="info-card-head">Cancelada</div><div class="info-card-value">{{ item_pedido.qtd_cancelada }}</div></div>
+          <div class="info-card"><div class="info-card-head">Faturada</div><div class="info-card-value">{{ item_pedido.qtd_faturada }}</div></div>
+        </div>
+
+        {% if produto and not erro %}
+          {# ---- etapa 2: comparação de preço + confirmação ---- #}
+          <div class="field">
+            <label>Produto novo</label>
+            <input type="text" value="{{ produto.codpro }} — {{ produto.descricao }}" disabled>
+          </div>
+          <div class="field">
+            <label>Quantidade a trocar</label>
+            <input type="text" value="{{ qtd }}" disabled>
+          </div>
+
+          <div class="info-cards" style="margin-bottom:1.2rem;">
+            <div class="info-card">
+              <div class="info-card-head">Preço atual (substituído)</div>
+              <div class="info-card-value">{{ '%.2f'|format(item_pedido.preco_unitario) if item_pedido.preco_unitario is not none else '—' }}</div>
+            </div>
+            <div class="info-card">
+              <div class="info-card-head">Preço do produto novo</div>
+              <div class="info-card-value">{{ '%.2f'|format(produto.preco) if produto.preco is not none else 'sem preço cadastrado' }}</div>
+            </div>
+            <div class="info-card">
+              <div class="info-card-head">Diferença</div>
+              <div class="info-card-value">
+                {% if produto.preco is not none and item_pedido.preco_unitario is not none %}
+                  {{ '%.2f'|format(produto.preco - item_pedido.preco_unitario) }}
+                {% else %}—{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <form method="POST">
+            <input type="hidden" name="codpro_novo" value="{{ codpro_novo }}">
+            <input type="hidden" name="qtd" value="{{ qtd }}">
+            <input type="hidden" name="confirmar" value="1">
+            <div style="display:flex; gap:0.75rem;">
+              <a href="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}" class="btn" style="flex:1; justify-content:center;">
+                Voltar
+              </a>
+              <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">
+                Confirmar troca
+              </button>
+            </div>
+          </form>
+        {% else %}
+          {# ---- etapa 1: informar produto novo ---- #}
+          <form method="POST">
+            <div class="field">
+              <label for="codpro_novo">Código do produto novo</label>
+              <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required autofocus>
+            </div>
+            <div class="field">
+              <label for="qtd">Quantidade a trocar</label>
+              <input type="number" id="qtd" name="qtd" step="any" min="0.01" max="{{ item_pedido.qtd_aberta }}" value="{{ qtd if qtd else item_pedido.qtd_aberta }}" required>
+            </div>
+            <div style="display:flex; gap:0.75rem;">
+              <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">
+                Cancelar
+              </a>
+              <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">
+                Buscar produto
+              </button>
+            </div>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}

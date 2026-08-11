@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Observação do item{% endblock %}
+{% block content %}
+<div class="hero-screen">
+  <div class="hero-inner" style="grid-template-columns: 1fr;">
+
+    <div class="auth-card" style="max-width:520px;">
+      <div class="card-brand">RT</div>
+      <p class="card-title">Observação do item</p>
+      <p class="card-subtitle">
+        Solicitação {{ numsol }}
+      </p>
+
+      {% if erro %}
+        <div class="alert">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+          {{ erro }}
+        </div>
+      {% endif %}
+
+      <form method="POST">
+        <div class="field">
+          <label for="observacao">Observação</label>
+          <textarea id="observacao" name="observacao" placeholder="Ex: peça avariada, aguardando substituição..." autofocus>{{ observacao or '' }}</textarea>
+        </div>
+        <div style="display:flex; gap:0.75rem;">
+          <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">
+            Cancelar
+          </a>
+          <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">
+            Salvar
+          </button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
