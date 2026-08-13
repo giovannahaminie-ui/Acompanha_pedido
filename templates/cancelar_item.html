@@ -19,18 +19,14 @@
       {% endif %}
 
       <div class="field">
-        <label>Qtd. aberta atualmente</label>
+        <label>Qtd. aberta atualmente (será toda cancelada)</label>
         <input type="text" value="{{ item.qtd_aberta }}" disabled>
       </div>
 
       <form method="POST">
         <div class="field">
-          <label for="qtd">Quantidade a cancelar</label>
-          <input type="number" id="qtd" name="qtd" step="any" min="0.01" max="{{ item.qtd_aberta }}" value="{{ item.qtd_aberta }}" required autofocus>
-        </div>
-        <div class="field">
           <label for="motivo">Motivo do cancelamento</label>
-          <textarea id="motivo" name="motivo" placeholder="Ex: peça avariada, cliente desistiu...">{{ motivo or '' }}</textarea>
+          <textarea id="motivo" name="motivo" placeholder="Ex: Insira aqui o motivo do cancelamento..." autofocus>{{ motivo or '' }}</textarea>
         </div>
         <div style="display:flex; gap:0.75rem;">
           <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">

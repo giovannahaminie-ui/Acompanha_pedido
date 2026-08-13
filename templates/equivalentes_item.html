@@ -30,7 +30,7 @@
     </div>
     <div class="equiv-right">
       <div style="display:flex; align-items:center; gap:0.5rem;">
-        <div class="equiv-price">—</div>
+        <div class="equiv-price">{{ '%.2f'|format(eq.preco) if eq.preco is not none else '—' }}</div>
         {% if eq.profor %}
           <button type="button" class="btn btn-icone" title="Copiar profor e ir para Trocar item"
                   onclick="copiarProforETrocar('{{ eq.profor }}', '{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}')">

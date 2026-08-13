@@ -1,17 +1,17 @@
 """
-Acesso ao Oracle (Sapiens). Querys estruturadas para o app Acompanha Pedido - Estoque Retífica.
+Acesso ao Oracle (Sapiens). Querys estruturadas para o app Acompanha Pedido, toda a lógica de funcionamento dos botões - Estoque Retífica.
+
 """
 
 import os
 from datetime import datetime
 
 from dotenv import load_dotenv
-load_dotenv()  # lê o arquivo .env na raiz do projeto
+load_dotenv()  # lê o arquivo .env na raiz do projeto (contendo ORACLE_DSN, ORACLE_USER, ORACLE_PASSWORD, FLASK_SECRET_KEY)
 
 ORACLE_DSN = os.environ.get("ORACLE_DSN", "")
 ORACLE_USER = os.environ.get("ORACLE_USER", "")
 ORACLE_PASSWORD = os.environ.get("ORACLE_PASSWORD", "")
-
 
 def get_connection():
     """
@@ -22,7 +22,6 @@ def get_connection():
     return oracledb.connect(
         user=ORACLE_USER, password=ORACLE_PASSWORD, dsn=ORACLE_DSN
     )
-
 
 # ---------------------------------------------------------------------
 # Autenticação - identifica o usuário pelo código do Sapiens (não existe
@@ -128,7 +127,7 @@ SQL_SOLICITACOES = """
 """
 
 def get_tipos_servico():
-    """Lista (código, descrição) de usu_ttipser - para o filtro da tela de seleção."""
+    """Lista (código, descrição) de usu_ttipser - para o filtro."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT usu_codtsv, usu_destsv FROM sapiens.usu_ttipser ORDER BY usu_destsv")
@@ -137,7 +136,7 @@ def get_tipos_servico():
     return tipos
 
 def get_etapas():
-    """Lista (código, descrição) de usu_tetppro - para o filtro da tela de seleção."""
+    """Lista (código, descrição) de usu_tetppro - para o filtro."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT usu_codetp, usu_desetp FROM sapiens.usu_tetppro ORDER BY usu_desetp")
@@ -320,10 +319,6 @@ def get_solicitacao_cabecalho(codemp, codfil, numsol):
     cols = [c[0].lower() for c in cur.description]
     cab_row = cur.fetchone()
     cab = dict(zip(cols, cab_row)) if cab_row else {}
-
-    # Cliente/cidade/representante vêm de uma consulta separada
-    # (E120PED.CODCLI -> E085CLI, E120PED.CODREP -> E090REP) - usu_tunineg/
-    # USU_DESNEG (usado antes) é a Unidade de Negócio, não o cliente.
     cliente, cidade, representante = "", "", ""
     if cab.get("usu_numped"):
         cur.execute(SQL_CLIENTE_PEDIDO, codemp=codemp, codfil=codfil, numped=cab["usu_numped"])
@@ -415,21 +410,25 @@ def get_solicitacao_detalhe(codemp, codfil, numsol):
 # fonte de preço será definida depois.
 # ---------------------------------------------------------------------
 SQL_EQUIVALENTES = """
-                SELECT eq.codder, 
-                       eq.proeqi, 
-                       eq.dereqi, 
-                       eq.conpr1, 
+                SELECT eq.codder,
+                       eq.proeqi,
+                       eq.dereqi,
+                       eq.conpr1,
                        eq.conpr2,
-                       p.despro, 
-                       p.codmar, 
+                       p.despro,
+                       p.codmar,
                        p.usu_codpro2,
-                       d.desder
+                       t.prebas
                 FROM sapiens.E075EQI eq
-                JOIN sapiens.E075PRO p ON p.codemp = eq.codemp 
+                JOIN sapiens.E075PRO p ON p.codemp = eq.codemp
                                       AND p.codpro = eq.proeqi
-                LEFT JOIN sapiens.E075DER d ON d.codemp = eq.codemp
-                                      AND d.codpro = eq.proeqi 
-                                      AND d.codder = eq.codder
+                LEFT JOIN sapiens.E081IPT t ON t.codemp = p.codemp
+                                           AND t.codtpr = '001'
+                                           AND t.codpro = p.codpro
+                                           AND t.qtdmax = 999999999
+                                           AND t.datini = CASE WHEN p.codemp=1 then '01/04/2011'
+                                                               WHEN p.codemp=12 then '01/01/2023'
+                                                               WHEN p.codemp=5 then '01/04/2014' END
                 WHERE eq.codemp = :codemp
                 AND eq.codpro = :codpro
 """
@@ -475,7 +474,7 @@ def assumir_solicitacao(codemp, codfil, numsol, usuario_separador):
     agora = datetime.now()
     cur.execute(
         SQL_ASSUMIR_SOLICITACAO,
-        dataatual=agora, horaatual=agora.strftime("%H:%M"),
+        dataatual=agora, horaatual=agora.hour * 60 + agora.minute,
         usucracha=usuario_separador, empsol=codemp, filsol=codfil, numsol=numsol,
     )
     conn.commit()
@@ -490,47 +489,20 @@ SQL_ITEM_SOLICITACAO_POR_SEQITE = """
 
                 SELECT usu_qtdabe, usu_qtdcan, usu_numped, usu_seqipd, usu_codpro
                 FROM sapiens.usu_t120sit
-                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                    WHERE usu_codemp=:codemp 
+                    AND usu_codfil=:codfil
+                    AND usu_numsol=:numsol 
+                    AND usu_seqite=:seqite
 
 """
 
-#  Cancelamento em 3 passos - mesmo padrão usado no cancelamento do item
-#  antigo na troca (SeqSolOld lá, usu_seqite aqui): sempre mexe no ITEM
-#  (usu_seqite), nunca na solicitação inteira.
-#  1) soma qtd em qtdcan / subtrai de qtdabe, marca sitite=2 (parcial);
-#  2) se qtdcan bateu com qtdsol, sitite vira 3 (cancelado);
-#  3) se ainda sobrou qtdsol > qtdcan, garante sitite=2 (parcial).
-#  Os updates 2 e 3 são mutuamente exclusivos pela condição de qtd, e todos
-#  ignoram item que já está com sitite=3 (não "reabre" um item cancelado).
-SQL_CANCELAR_ITEM_SOLICITACAO_QTD = """
+SQL_CANCELAR_ITEM_SOLICITACAO = """
                 UPDATE sapiens.usu_t120sit
-                    SET usu_qtdcan = usu_qtdcan + :qtd,
-                        usu_qtdabe = usu_qtdabe - :qtd,
-                        usu_sitite = 2
+                    SET usu_qtdabe = usu_qtdabe - :qtd,
+                        usu_qtdcan = usu_qtdcan + :qtd
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
                 AND usu_numsol=:numsol AND usu_seqite=:seqite
-                AND usu_sitite <> 3
 """
-
-SQL_CANCELAR_ITEM_SOLICITACAO_TOTAL = """
-                UPDATE sapiens.usu_t120sit
-                    SET usu_sitite = 3
-                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol AND usu_seqite=:seqite
-                AND usu_qtdsol = usu_qtdcan
-                AND usu_sitite <> 3
-"""
-
-SQL_CANCELAR_ITEM_SOLICITACAO_PARCIAL = """
-                UPDATE sapiens.usu_t120sit
-                    SET usu_sitite = 2
-                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol AND usu_seqite=:seqite
-                AND usu_qtdsol > usu_qtdcan
-                AND usu_sitite <> 3
-"""
-
 
 def get_item_solicitacao(codemp, codfil, numsol, seqite):
     """Dados atuais de um item da solicitação pelo seqite (chave da T120SIT) -
@@ -549,53 +521,37 @@ def get_item_solicitacao(codemp, codfil, numsol, seqite):
         "numped": numped, "seqipd": seqipd, "codpro": codpro,
     }
 
-def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, qtd, motivo=None):
+def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, qtd):
     """Cancela `qtd` unidades do item na solicitação (T120SIT) - move de
-    qtd_aberta pra qtd_cancelada e recalcula usu_sitite (2=parcial,
-    3=cancelado). Não mexe no pedido nem chama webservice. Sempre no
-    item (usu_seqite) - nunca na solicitação inteira. Se `motivo` vier
-    preenchido, grava no usu_obsite do mesmo item (mesma coluna usada pela
-    observação da solicitação)."""
+    qtd_aberta pra qtd_cancelada. Não mexe no pedido nem chama webservice."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        SQL_CANCELAR_ITEM_SOLICITACAO_QTD,
+        SQL_CANCELAR_ITEM_SOLICITACAO,
         qtd=qtd, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
     )
-    cur.execute(
-        SQL_CANCELAR_ITEM_SOLICITACAO_TOTAL,
-        codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-    )
-    cur.execute(
-        SQL_CANCELAR_ITEM_SOLICITACAO_PARCIAL,
-        codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-    )
-    if motivo and motivo.strip():
-        cur.execute(
-            SQL_SALVAR_OBSERVACAO_ITEM,
-            obs=motivo.strip(), codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-        )
     conn.commit()
     conn.close()
     return True
 
 # ---------------------------------------------------------------------
-# Observação do item (botão "Observação" - grava direto na T120SIT,
-# substitui o antigo comentário local em SQLite). Depende da coluna
-# usu_obsite existir na tabela (ver README) - se não existir, o Oracle
-# levanta ORA-00904 e a rota trata isso com uma mensagem clara.
+# Observação do item (botão "Observação" - grava direto na T120SIT.
 # ---------------------------------------------------------------------
 SQL_SALVAR_OBSERVACAO_ITEM = """
                 UPDATE sapiens.usu_t120sit
                     SET usu_obsite = :obs
-                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                WHERE usu_codemp=:codemp 
+                AND usu_codfil=:codfil
+                AND usu_numsol=:numsol 
+                AND usu_seqite=:seqite
 """
 
 SQL_OBSERVACAO_ITEM = """
                 SELECT usu_obsite FROM sapiens.usu_t120sit
-                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                WHERE usu_codemp=:codemp 
+                AND usu_codfil=:codfil
+                AND usu_numsol=:numsol 
+                AND usu_seqite=:seqite
 """
 
 def get_observacao_item(codemp, codfil, numsol, seqite):
@@ -613,48 +569,17 @@ def get_observacoes_solicitacao(codemp, codfil, numsol):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
+
         "SELECT usu_seqite, usu_obsite " \
         "FROM sapiens.usu_t120sit "
-        "WHERE usu_codemp=:codemp AND usu_codfil=:codfil AND usu_numsol=:numsol",
+        "WHERE usu_codemp=:codemp AND usu_codfil=:codfil " \
+        "AND usu_numsol=:numsol",
+
         codemp=codemp, codfil=codfil, numsol=numsol,
     )
     rows = cur.fetchall()
     conn.close()
     return {seqite: obs.strip() for seqite, obs in rows if obs}
-
-
-# ---------------------------------------------------------------------
-# Observação única da solicitação (botão que ficava "por item" nas ações
-# agora é um único botão no cabeçalho) - continua gravando no usu_obsite
-# da usu_t120sit, só que sem filtro de usu_seqite: aplica o mesmo texto em
-# TODOS os itens da solicitação de uma vez.
-# ---------------------------------------------------------------------
-SQL_SALVAR_OBSERVACAO_SOLICITACAO = """
-                UPDATE sapiens.usu_t120sit
-                    SET usu_obsite = :obs
-                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol
-"""
-
-
-def get_observacao_solicitacao(codemp, codfil, numsol):
-    """Observação atual da solicitação, pra pré-preencher a caixa do
-    cabeçalho - pega a primeira não-vazia entre os itens (todos devem ter
-    o mesmo texto, já que salvar_observacao_solicitacao aplica em todos)."""
-    observacoes = get_observacoes_solicitacao(codemp, codfil, numsol)
-    return next(iter(observacoes.values()), "")
-
-
-def salvar_observacao_solicitacao(codemp, codfil, numsol, observacao):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        SQL_SALVAR_OBSERVACAO_SOLICITACAO,
-        obs=observacao.strip(), codemp=codemp, codfil=codfil, numsol=numsol,
-    )
-    conn.commit()
-    conn.close()
-    return True
 
 
 def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
@@ -669,6 +594,35 @@ def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
     return True
 
 # ---------------------------------------------------------------------
+# Observação única da solicitação.
+# ---------------------------------------------------------------------
+SQL_SALVAR_OBSERVACAO_SOLICITACAO = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_obsite = :obs
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol
+"""
+
+def get_observacao_solicitacao(codemp, codfil, numsol):
+    """Observação atual da solicitação, pra pré-preencher a caixa do
+    cabeçalho - pega a primeira não-vazia entre os itens (todos devem ter
+    o mesmo texto, já que salvar_observacao_solicitacao aplica em todos)."""
+    observacoes = get_observacoes_solicitacao(codemp, codfil, numsol)
+    return next(iter(observacoes.values()), "")
+
+def salvar_observacao_solicitacao(codemp, codfil, numsol, observacao):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        SQL_SALVAR_OBSERVACAO_SOLICITACAO,
+        obs=observacao.strip(), codemp=codemp, codfil=codfil, numsol=numsol,
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+# ---------------------------------------------------------------------
 # Validação de produto novo + preço (botões "Trocar" e "Inserir peça").
 # Preço vem da E081ITP, registro vigente (situação ativa, data de início
 # mais recente <= hoje). CODTAB (tabela de preço) tenta vir do pedido
@@ -677,90 +631,80 @@ def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
 # (40524 de ~48000 pedidos recentes). Quando vier em branco/nulo, cai pro
 # '001', que é a tabela ativa em ~99% dos produtos em todas as empresas.
 # ---------------------------------------------------------------------
-SQL_PRODUTO_ATIVO = """
-                SELECT despro, codmar, sitpro FROM sapiens.e075pro
-                WHERE codemp=:codemp AND codpro=:codpro
-"""
-
-SQL_PRECO_VIGENTE = """
-                SELECT prebas FROM sapiens.e081itp
-                WHERE codemp=:codemp AND codpro=:codpro AND codtpr=:codtpr
-                AND sitreg='A' AND datini = (
-                    SELECT MAX(datini) FROM sapiens.e081itp
-                    WHERE codemp=:codemp AND codpro=:codpro AND codtpr=:codtpr
-                    AND sitreg='A' AND datini <= SYSDATE
-                )
-"""
-
-SQL_CODTAB_PEDIDO = "SELECT codtab FROM sapiens.e120ped WHERE codemp=:codemp AND codfil=:codfil AND numped=:numped"
-
 CODTPR_PADRAO = "001"
 
+SQL_PRODUTO_ATIVO_PRECO = """
+                SELECT t.codpro,t.prebas,e.coddep,a.qtdabe,a.qtdped, p.codmar, p.despro, a.seqipd 
+                FROM sapiens.e075pro p
+                LEFT JOIN sapiens.e081itp t ON t.codemp=p.codemp 
+                    AND t.codtpr='001' 
+                    AND t.qtdmax=999999999 
+                    AND t.datini = CASE WHEN p.codemp=1 THEN TO_DATE('01/04/2011','DD/MM/YYYY') WHEN p.codemp=12 THEN TO_DATE('01/01/2023','DD/MM/YYYY') WHEN p.codemp=5 THEN TO_DATE('01/04/2014','DD/MM/YYYY') END
+                LEFT JOIN sapiens.e210est e ON e.codemp=p.codemp 
+                    AND e.codpro=p.codpro AND e.coddep = CASE WHEN p.codemp=1 
+                    AND :filsol in (10,1001) THEN '3' ELSE '1' end
+                LEFT JOIN sapiens.e120ipd a ON a.codemp=p.codemp 
+                    AND a.codfil=:filsol 
+                    AND a.codpro=p.codpro 
+                    AND a.sitipd <> 5
+                WHERE p.sitpro='A' 
+                    AND t.sitreg='A' 
+                    AND p.codemp=:empsol 
+                    AND (TO_CHAR(p.codpro)=:pronew OR p.usu_codpro2=:pronew)
+"""
 
 def buscar_produto_preco(codemp, codfil, numped, codpro):
     """
-    Valida o produto novo (E075PRO ativo) e busca o preço vigente (E081ITP)
-    pela tabela de preço do pedido em questão. Retorna None se o produto não
-    existir; retorna dict com preco=None se existir mas não tiver preço
-    vigente cadastrado (a tela decide o que fazer nesse caso).
+    Valida o produto novo (E075PRO ativo) e busca o preço vigente (E081ITP,
+    codtpr fixo '001') numa consulta só (SQL_PRODUTO_ATIVO_PRECO). Retorna
+    None se o produto não existir/estiver inativo (já filtrado no WHERE);
+    retorna dict com preco=None se existir mas não tiver preço vigente
+    cadastrado (a tela decide o que fazer nesse caso).
 
     """
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute(SQL_PRODUTO_ATIVO, codemp=codemp, codpro=codpro)
+    cur.execute(SQL_PRODUTO_ATIVO_PRECO, empsol=codemp, filsol=codfil, pronew=codpro)
     prod_row = cur.fetchone()
-    if not prod_row:
-        conn.close()
-        return None
-    despro, codmar, sitpro = prod_row
-
-    cur.execute(SQL_CODTAB_PEDIDO, codemp=codemp, codfil=codfil, numped=numped)
-    codtab_row = cur.fetchone()
-    codtab = (codtab_row[0] or "").strip() if codtab_row else ""
-    codtab = codtab or CODTPR_PADRAO
-
-    cur.execute(SQL_PRECO_VIGENTE, codemp=codemp, codpro=codpro, codtpr=codtab)
-    preco_row = cur.fetchone()
-    preco = float(preco_row[0]) if preco_row and preco_row[0] is not None else None
-
     conn.close()
+    if not prod_row:
+        return None
+    _codpro_enc, prebas, _coddep, _qtdabe, _qtdped, codmar, despro, _seqipd = prod_row
+
+    preco = float(prebas) if prebas is not None else None
     return {
         "codpro": codpro, "descricao": despro, "marca": (codmar or "").strip() or None,
-        "ativo": sitpro == "A", "codtab": codtab, "preco": preco,
+        "ativo": True, "codtab": CODTPR_PADRAO, "preco": preco,
     }
 
-
-# ---------------------------------------------------------------------
-# Validação adicional de produto novo (regra "SQL_PRODUTO_ATIVO_PRECO"):
-# além do preço vigente (já checado por buscar_produto_preco acima), o
-# produto precisa ter ligação com o depósito da filial do pedido (linha em
-# E210EST) - sem isso não dá pra separar/retirar o item. A regra
-# filial->depósito é a mesma já usada no JOIN de SQL_ITENS_SOLICITACAO
-# (empresa 1: L=1, P=3, C=5; empresa 5/12: sempre 1).
-# Quem chama decide a mensagem de parada (ver app.py, rotas
-# inserir_item/trocar_item):
-#   - produto=None (buscar_produto_preco)                -> "não encontrado"
-#   - produto["preco"] nulo ou 0                          -> "não possui preço"
-#   - produto_tem_ligacao_deposito(...) == False           -> "sem ligação com o depósito"
-# ---------------------------------------------------------------------
-SQL_FILIAL_PEDIDO = "SELECT usu_filexe FROM sapiens.e120ped WHERE codemp=:codemp AND codfil=:codfil AND numped=:numped"
+SQL_FILIAL_PEDIDO = "SELECT usu_filexe FROM sapiens.e120ped " \
+    "                   WHERE codemp=:codemp " \
+    "                   AND codfil=:codfil " \
+    "                   AND numped=:numped"
 
 SQL_DEPOSITO_LIGADO_PRODUTO = """
-                SELECT MAX(e.coddep) FROM sapiens.e210est e
-                WHERE e.codemp=:codemp AND e.codpro=:codpro AND e.coddep=:coddep_esperado
+                SELECT MAX(e.coddep)
+                FROM sapiens.e210est e
+                JOIN sapiens.e075pro p ON p.codemp = e.codemp 
+                AND p.codpro = e.codpro
+                WHERE e.codemp = :codemp
+                AND (TO_CHAR(p.codpro) = :codpro OR p.usu_codpro2 = :codpro)
+                AND e.coddep = :coddep_esperado
 """
 
-
 def _coddep_esperado(codemp, filexe):
-    """Mesma regra filial->depósito do JOIN em SQL_ITENS_SOLICITACAO."""
+    """Mesma regra filial->depósito do JOIN em SQL_ITENS_SOLICITACAO -
+    exceto o ramo da empresa 2 (RTL), que é novo aqui e ainda não foi
+    validado contra dado real."""
     filexe = (filexe or "").strip().upper()
     if codemp == 1:
         return {"L": "1", "P": "3", "C": "5"}.get(filexe)
+    if codemp == 2:
+        return {"L": "1", "P": "2"}.get(filexe)
     if codemp in (5, 12):
         return "1"
     return None
-
 
 def produto_tem_ligacao_deposito(codemp, codfil, numped, codpro):
     """True se o produto tiver linha em E210EST no depósito ligado à filial
@@ -790,7 +734,10 @@ def produto_tem_ligacao_deposito(codemp, codfil, numped, codpro):
 SQL_ITEM_PEDIDO = """
                 SELECT qtdped, qtdabe, qtdcan, qtdfat, preuni
                 FROM sapiens.e120ipd
-                WHERE codemp=:codemp AND codfil=:codfil AND numped=:numped AND seqipd=:seqipd
+                    WHERE codemp=:codemp 
+                    AND codfil=:codfil 
+                    AND numped=:numped 
+                    AND seqipd=:seqipd
 """
 
 def get_item_pedido(codemp, codfil, numped, seqipd):
@@ -812,30 +759,32 @@ def get_item_pedido(codemp, codfil, numped, seqipd):
 # ---------------------------------------------------------------------
 # Inserir item novo na solicitação (T120SIT) - usado por Inserir peça e
 # pela segunda metade da Troca. usu_seqipd vem da resposta do webservice
-# GravarPedidos (ver db/pedido_ws.py); usu_indtrc marca 'S' quando o item
-# entrou por uma troca (pra diferenciar de uma inclusão simples).
+# GravarPedidos (ver db/pedido_ws.py). usu_sitite entra fixo em 1 (aberto).
 # ---------------------------------------------------------------------
 SQL_PROXIMO_SEQITE = """
-                SELECT NVL(MAX(usu_seqite), 0) + 1 FROM sapiens.usu_t120sit
-                WHERE usu_codemp=:codemp AND usu_codfil=:codfil AND usu_numsol=:numsol
+                SELECT NVL(MAX(usu_seqite), 0) + 1 
+                FROM sapiens.usu_t120sit
+                    WHERE usu_codemp=:codemp 
+                    AND usu_codfil=:codfil 
+                    AND usu_numsol=:numsol
 """
 
 SQL_INSERIR_ITEM_SOLICITACAO = """
                 INSERT INTO sapiens.usu_t120sit (
                     usu_codemp, usu_codfil, usu_numsol, usu_seqite,
-                    usu_numped, usu_seqipd, usu_qtdsol, usu_qtdabe, usu_qtdcan,
-                    usu_qtddev, usu_qtdmov, usu_qtdmso, usu_qtdate,
-                    usu_codpro, usu_despec, usu_indtrc,
+                    usu_numped, usu_seqipd, usu_qtdsol, usu_sitite,
+                    usu_qtdabe, usu_qtdcan,
+                    usu_qtddev, usu_qtdmov, usu_qtdate,
+                    usu_codpro, usu_despec,
                     usu_datsol, usu_horsol, usu_ususol
                 ) VALUES (
                     :codemp, :codfil, :numsol, :seqite,
-                    :numped, :seqipd, :qtd, :qtd, 0,
-                    0, 0, 0, 0,
-                    :codpro, :descricao, :indtrc,
+                    :numped, :seqipd, :qtd, 1,
+                    :qtd, 0, 0, 0, 0,
+                    :codpro, :descricao,
                     :data, :hora, :usuario
                 )
 """
-
 
 def inserir_item_solicitacao(codemp, codfil, numsol, numped, seqipd, codpro, descricao, qtd, usuario, veio_de_troca=False):
     conn = get_connection()
@@ -848,7 +797,7 @@ def inserir_item_solicitacao(codemp, codfil, numsol, numped, seqipd, codpro, des
         SQL_INSERIR_ITEM_SOLICITACAO,
         codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
         numped=numped, seqipd=seqipd, qtd=qtd,
-        codpro=codpro, descricao=(descricao or "")[:250], indtrc=("S" if veio_de_troca else None),
+        codpro=codpro, descricao=(descricao or "")[:250],
         data=agora, hora=agora.hour * 60 + agora.minute, usuario=int(usuario),
     )
     conn.commit()

@@ -1,5 +1,5 @@
 """
-Acompanha Pedido - Estoque Retífica
+Acompanha Pedido API/FLASK - Estoque Retífica
 
 """
 
@@ -22,20 +22,17 @@ local_db.init_db()
 # Listas usadas na tela de seleção
 EMPRESAS = [(1, "Retífica"), (2, "RTL"), (5, "Transmissões"), (12, "Tiête car")]
 # usu_filexe (e120ped) guarda letra, não código numérico de filial
-FILIAIS = [("L", "Londrina"), ("P", "Prudente"), ("C", "Cambé")]
-# tipo_servico/etapa vêm do Oracle (usu_ttipser / usu_tetppro)
+FILIAIS = [("L", "Londrina"), ("P", "Prudente"), ("C", "Cambé")] # A Filial de Cambé é a CRAF
 
 # Tolerância de diferença de preço na troca de item (produto novo vs.
 # produto substituído) - abaixo disso não mostra o comparativo de preço,
 # só pede a confirmação simples; acima, mostra o alerta com os valores e
 # passa a exigir o campo "quem autorizou" (gravado no usu_obsite do item
 # novo). Regra: 10% do preço atual (substituído) pra maioria dos itens;
-# R$ 200,00 fixo pra "motor completo" (identificado pelo tipo de serviço
-# da solicitação, usu_ttipser.usu_destsv - ver get_solicitacao_cabecalho).
+# R$ 200,00 fixo pra "motor completo" (identificado pelo tipo de serviço)
 TOLERANCIA_PRECO_TROCA_PERCENTUAL = 0.10
 TOLERANCIA_PRECO_TROCA_MOTOR_COMPLETO = 200.0
 TIPO_SERVICO_MOTOR_COMPLETO = "Completo"
-
 
 # ---------------------------------------------------------------------
 # Autenticação / controle de sessão
@@ -53,7 +50,6 @@ def perfil_atual():
     """Perfil (G/B/U) do usuário logado, ou None se ainda não tem perfil."""
     usuario = session.get("usuario")
     return local_db.get_perfil(usuario) if usuario else None
-
 
 @app.context_processor
 def injetar_perfil():
@@ -77,16 +73,13 @@ def login():
         return render_template("login.html", erro="Código de usuário inválido")
     return render_template("login.html")
 
-
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
-
 # ---------------------------------------------------------------------
-# Seleção inicial (empresa / filial - tipo de serviço e etapa agora são
-# filtros do painel, não mais escolhidos aqui)
+# Seleção inicial (empresa / filial )
 # ---------------------------------------------------------------------
 @app.route("/selecao", methods=["GET", "POST"])
 @login_obrigatorio
@@ -102,10 +95,8 @@ def selecao():
         empresas=EMPRESAS, filiais=FILIAIS,
     )
 
-
 # ---------------------------------------------------------------------
-# Painel principal - tipo de serviço e etapa são filtros aqui (query
-# string ?tipo_servico=&etapa=), não fazem parte da seleção inicial.
+# Painel principal - tipo de serviço e etapa são usados como filtros opcionais
 # ---------------------------------------------------------------------
 @app.route("/painel")
 @login_obrigatorio
@@ -176,7 +167,7 @@ def detalhe_solicitacao(codemp, codfil, numsol):
     try:
         observacao_itens = oracle_db.get_observacao_solicitacao(codemp, codfil, numsol)
     except Exception:
-        observacao_itens = None  # coluna usu_obsite ainda não existe no Oracle
+        observacao_itens = None  
     return render_template(
         "detalhe_solicitacao.html",
         solicitacao=dados["solicitacao"],
@@ -188,9 +179,7 @@ def detalhe_solicitacao(codemp, codfil, numsol):
 # ---------------------------------------------------------------------
 # Observação da solicitação (botão único no cabeçalho - grava direto na
 # T120SIT do Sapiens, usu_obsite, aplicado em TODOS os itens da
-# solicitação de uma vez; antes era um botão por item). Depende da coluna
-# usu_obsite existir no Oracle (ver README); se ainda não existir, mostra
-# aviso claro em vez de deixar o erro do Oracle estourar pro usuário.
+# solicitação de uma vez; antes era um botão por item).
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/observacao", methods=["GET", "POST"])
 @login_obrigatorio
@@ -198,13 +187,13 @@ def observacao_solicitacao(codemp, codfil, numsol):
     if request.method == "POST":
         observacao = request.form.get("observacao", "")
         try:
-            oracle_db.salvar_observacao_solicitacao(codemp, codfil, numsol, observacao)
+            oracle_db.salvar_observacao_solicitacao(codemp, codfil, numsol, observacao, session["usuario"])
             return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
         except Exception:
             return render_template(
                 "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
                 observacao=observacao,
-                erro="Não foi possível salvar - o campo de observação (usu_obsite) ainda não existe na T120SIT.",
+                erro="Falha ao salvar a observação - tente novamente.",
             )
     try:
         observacao = oracle_db.get_observacao_solicitacao(codemp, codfil, numsol)
@@ -216,7 +205,7 @@ def observacao_solicitacao(codemp, codfil, numsol):
     )
 
 # ---------------------------------------------------------------------
-# Cancelar item na solicitação (só salva na T120SIT)
+# Cancelar item na solicitação (só realiza UPDATE na T120SIT)
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/cancelar", methods=["GET", "POST"])
 @login_obrigatorio
@@ -229,14 +218,10 @@ def cancelar_item(codemp, codfil, numsol, seqite):
     motivo = ""
     if request.method == "POST":
         motivo = request.form.get("motivo", "").strip()
-        try:
-            qtd = float(request.form.get("qtd", "0").replace(",", "."))
-        except ValueError:
-            qtd = 0
-        if qtd <= 0 or qtd > item["qtd_aberta"]:
-            erro = f"Quantidade inválida - máximo {item['qtd_aberta']} (qtd. aberta)."
+        if item["qtd_aberta"] <= 0:
+            erro = "Não há quantidade em aberto para cancelar."
         else:
-            oracle_db.cancelar_item_solicitacao(codemp, codfil, numsol, seqite, qtd, motivo=motivo)
+            oracle_db.cancelar_item_solicitacao(codemp, codfil, numsol, seqite, session["usuario"], motivo=motivo)
             return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
     return render_template(
@@ -245,7 +230,7 @@ def cancelar_item(codemp, codfil, numsol, seqite):
     )
 
 # ---------------------------------------------------------------------
-# Inserir peça nova na solicitação + no pedido (webservice GravarPedidos).
+# Inserir peça nova na solicitação + no pedido (webservice GravarPedidos_15).
 # Fluxo em duas etapas na mesma rota: 1ª submissão valida produto/preço e
 # mostra a comparação pra confirmação manual; 2ª (com "confirmar" no form)
 # executa de fato - primeiro o pedido (webservice), só grava a solicitação
@@ -377,7 +362,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
                 pedido_ws.cancelar_item_pedido(
                     codemp, codfil, item["numped"], item["seqipd"], qtd, session["usuario"],
                 )
-                oracle_db.cancelar_item_solicitacao(codemp, codfil, numsol, seqite, qtd)
+                oracle_db.cancelar_qtd_item_solicitacao_troca(codemp, codfil, numsol, seqite, qtd)
             except pedido_ws.PedidoWebserviceError as e:
                 erro = f"Falha ao cancelar o item substituído - nada foi alterado. {e}"
 
@@ -411,7 +396,6 @@ def trocar_item(codemp, codfil, numsol, seqite):
         mostrar_confirmacao=mostrar_confirmacao,
     )
 
-
 # ---------------------------------------------------------------------
 # Itens equivalentes (E075EQUI) - consulta, sem gravação
 # ---------------------------------------------------------------------
@@ -437,7 +421,6 @@ def admin_perfis():
     usuarios = local_db.listar_usuarios_com_perfil(usuarios_sapiens)
     return render_template("admin_perfis.html", usuarios=usuarios)
 
-
 @app.route("/admin/perfis/salvar", methods=["POST"])
 @login_obrigatorio
 def salvar_perfil():
@@ -448,11 +431,9 @@ def salvar_perfil():
     )
     return redirect(url_for("admin_perfis"))
 
-
 @app.route("/")
 def index():
     return redirect(url_for("painel") if "usuario" in session else url_for("login"))
-
 
 if __name__ == "__main__":
     app.run(debug=True, port=5051)

@@ -1,8 +1,8 @@
 """
 Cliente do webservice GravarPedidos (Sapiens/Senior) - usado só pelos fluxos de
 Troca e Inserção de peça, pra cancelar/incluir item no PEDIDO (E120IPD). A
-solicitação (T120SIT) é gravada à parte, direto no Oracle (ver oracle_db.py),
-só depois que o webservice confirmar sucesso.
+solicitação (T120SIT) é gravada à parte por meio de UPDATE, direto no Oracle, 
+e só depois o webservice é chamado pra mexer no pedido real. 
 
 Estrutura da chamada validada por introspecção do WSDL real (GravarPedidos_15)
 e por testes reais (via SoapUI, fora deste código):
@@ -39,14 +39,15 @@ e por testes reais (via SoapUI, fora deste código):
 
 Todo envelope SOAP enviado/recebido é gravado em texto puro (senha mascarada)
 em logs/pedido_ws_envelopes.log - assim dá pra conferir exatamente o XML que
-foi montado e a resposta real do Sapiens, sem depender de reconstruir isso a
-partir do dict Python. Ver _log_envelopes().
+foi montado e a resposta real do Sapiens. Além disso, cada par de envelopes (enviado/recebido) 
+é salvo em logs/xml/ como arquivos separados, nomeados com timestamp + operação, pra poder abrir cada retorno isolado.
 
 """
 
 import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -59,6 +60,9 @@ PEDIDO_WS_PASSWORD = os.environ.get("PEDIDO_WS_PASSWORD", "")
 
 _LOG_DIR = Path(__file__).parent.parent / "logs"
 _LOG_DIR.mkdir(exist_ok=True)
+
+_XML_DIR = _LOG_DIR / "xml"
+_XML_DIR.mkdir(exist_ok=True)
 
 logger = logging.getLogger("pedido_ws")
 logger.setLevel(logging.INFO)
@@ -109,6 +113,18 @@ def _log_envelopes(history, operacao):
         operacao, _envelope_para_texto(history.last_sent),
         operacao, _envelope_para_texto(history.last_received),
     )
+    _salvar_xml_arquivos(history, operacao)
+
+def _salvar_xml_arquivos(history, operacao):
+    """Salva o envelope enviado e o recebido como arquivos .xml separados em
+    logs/xml/ (um par por chamada, nomeado com timestamp + operação) - além
+    do log de texto único (_log_envelopes), pra poder abrir cada retorno
+    isolado (ex: num editor de XML) sem procurar dentro do log grande."""
+    agora = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    for sufixo, entrada in (("enviado", history.last_sent), ("recebido", history.last_received)):
+        xml = _envelope_para_texto(entrada)
+        caminho = _XML_DIR / f"{agora}_{operacao}_{sufixo}.xml"
+        caminho.write_text(xml, encoding="utf-8")
 
 def _chamar_gravar_pedidos(pedidos, operacao):
     client, history = _get_client()
@@ -164,7 +180,6 @@ def cancelar_item_pedido(codemp, codfil, numped, seqipd, qtd_cancelar, usuario):
     }
     _chamar_gravar_pedidos([pedido], "cancelar_item_pedido")
     return True
-
 
 def incluir_item_pedido(codemp, codfil, numped, codpro, qtd, preco, codtab, usuario):
     """Inclui um item novo num pedido que já existe. Retorna o seqIpd que o

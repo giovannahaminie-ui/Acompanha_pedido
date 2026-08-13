@@ -72,7 +72,7 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
       Observação da solicitação
     </div>
-    <div class="info-card-value" style="font-weight:500;">{{ solicitacao.observacao or '—' }}</div>
+    <div class="info-card-value clamp" style="font-weight:500;" data-obs-titulo="Observação da solicitação">{{ solicitacao.observacao or '—' }}</div>
   </div>
 
   <div class="info-card">
@@ -80,7 +80,7 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       Observação do pedido
     </div>
-    <div class="info-card-value" style="font-weight:500;">{{ solicitacao.observacao_pedido or '—' }}</div>
+    <div class="info-card-value clamp" style="font-weight:500;" data-obs-titulo="Observação do pedido">{{ solicitacao.observacao_pedido or '—' }}</div>
   </div>
 
   <div class="info-card">
@@ -88,7 +88,7 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
       Observação da Conferência
     </div>
-    <div class="info-card-value" style="font-weight:500;">{{ solicitacao.memorando or '—' }}</div>
+    <div class="info-card-value clamp" style="font-weight:500;" data-obs-titulo="Observação da Conferência">{{ solicitacao.memorando or '—' }}</div>
   </div>
 
   <div class="info-card">
@@ -101,9 +101,60 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
       </a>
     </div>
-    <div class="info-card-value" style="font-weight:500;">{{ observacao_itens or '—' }}</div>
+    <div class="info-card-value clamp" style="font-weight:500;" data-obs-titulo="Observação dos itens">{{ observacao_itens or '—' }}</div>
   </div>
 </div>
+
+<div class="obs-modal-overlay" id="obs-modal-overlay">
+  <div class="obs-modal">
+    <button type="button" class="obs-modal-close" id="obs-modal-close" title="Fechar" aria-label="Fechar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+    <p class="obs-modal-title" id="obs-modal-titulo"></p>
+    <div class="obs-modal-body" id="obs-modal-body"></div>
+  </div>
+</div>
+
+<script>
+  // Cards de observação: quando o texto passa das 4 linhas do clamp,
+  // acrescenta um botão "Ver mais" que abre o texto completo num modal
+  // (mantém os cards proporcionais entre si em vez de esticarem conforme
+  // o tamanho do texto).
+  document.addEventListener('DOMContentLoaded', function () {
+    const overlay = document.getElementById('obs-modal-overlay');
+    const modalTitulo = document.getElementById('obs-modal-titulo');
+    const modalBody = document.getElementById('obs-modal-body');
+
+    function abrirModal(titulo, texto) {
+      modalTitulo.textContent = titulo;
+      modalBody.textContent = texto;
+      overlay.classList.add('open');
+    }
+    function fecharModal() {
+      overlay.classList.remove('open');
+    }
+
+    document.getElementById('obs-modal-close').addEventListener('click', fecharModal);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) fecharModal();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') fecharModal();
+    });
+
+    document.querySelectorAll('.info-card-value.clamp').forEach(function (valueEl) {
+      if (valueEl.scrollHeight <= valueEl.clientHeight + 1) return; // não precisa de "ver mais"
+      const texto = valueEl.textContent.trim();
+      const titulo = valueEl.dataset.obsTitulo || '';
+      const botao = document.createElement('button');
+      botao.type = 'button';
+      botao.className = 'info-card-ver-mais';
+      botao.textContent = 'Ver mais';
+      botao.addEventListener('click', function () { abrirModal(titulo, texto); });
+      valueEl.insertAdjacentElement('afterend', botao);
+    });
+  });
+</script>
 
 <p class="section-title">Itens solicitados e saldo por depósito</p>
 
@@ -112,13 +163,13 @@
     <colgroup>
       <col style="width:6%">
       <col style="width:5%">
-      <col style="width:12%">
-      <col style="width:11%">
+      <col style="width:9%">
+      <col style="width:8%">
       <col style="width:5%">
       <col style="width:5%">
-      <col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%">
+      <col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">
       <col style="width:11%">
-      <col style="width:12%">
+      <col style="width:11%">
     </colgroup>
     <thead>
       <tr>

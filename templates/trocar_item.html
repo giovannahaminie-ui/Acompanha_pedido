@@ -35,6 +35,10 @@
             <input type="text" value="{{ produto.codpro }} — {{ produto.descricao }}" disabled>
           </div>
           <div class="field">
+            <label>Marca</label>
+            <input type="text" value="{{ produto.marca or '—' }}" disabled>
+          </div>
+          <div class="field">
             <label>Quantidade a trocar</label>
             <input type="text" value="{{ qtd }}" disabled>
           </div>
