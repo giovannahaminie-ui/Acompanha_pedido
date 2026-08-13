@@ -23,7 +23,18 @@ local_db.init_db()
 EMPRESAS = [(1, "Retífica"), (2, "RTL"), (5, "Transmissões"), (12, "Tiête car")]
 # usu_filexe (e120ped) guarda letra, não código numérico de filial
 FILIAIS = [("L", "Londrina"), ("P", "Prudente"), ("C", "Cambé")]
-# tipo_servico/etapa vêm do Oracle (usu_ttipser / usu_tetppro) 
+# tipo_servico/etapa vêm do Oracle (usu_ttipser / usu_tetppro)
+
+# Tolerância de diferença de preço na troca de item (produto novo vs.
+# produto substituído) - abaixo disso não mostra o comparativo de preço,
+# só pede a confirmação simples; acima, mostra o alerta com os valores e
+# passa a exigir o campo "quem autorizou" (gravado no usu_obsite do item
+# novo). Regra: 10% do preço atual (substituído) pra maioria dos itens;
+# R$ 200,00 fixo pra "motor completo" (identificado pelo tipo de serviço
+# da solicitação, usu_ttipser.usu_destsv - ver get_solicitacao_cabecalho).
+TOLERANCIA_PRECO_TROCA_PERCENTUAL = 0.10
+TOLERANCIA_PRECO_TROCA_MOTOR_COMPLETO = 200.0
+TIPO_SERVICO_MOTOR_COMPLETO = "Completo"
 
 
 # ---------------------------------------------------------------------
@@ -74,7 +85,8 @@ def logout():
 
 
 # ---------------------------------------------------------------------
-# Seleção inicial (empresa / filial / tipo de serviço / etapa)
+# Seleção inicial (empresa / filial - tipo de serviço e etapa agora são
+# filtros do painel, não mais escolhidos aqui)
 # ---------------------------------------------------------------------
 @app.route("/selecao", methods=["GET", "POST"])
 @login_obrigatorio
@@ -83,19 +95,17 @@ def selecao():
         session["filtro"] = {
             "empresa": request.form.get("empresa"),
             "filial": request.form.get("filial") or None,
-            "tipo_servico": request.form.get("tipo_servico") or None,
-            "etapa": request.form.get("etapa") or None,
         }
         return redirect(url_for("painel"))
     return render_template(
         "selecao.html",
         empresas=EMPRESAS, filiais=FILIAIS,
-        tipos_servico=oracle_db.get_tipos_servico(), etapas=oracle_db.get_etapas(),
     )
 
 
 # ---------------------------------------------------------------------
-# Painel principal
+# Painel principal - tipo de serviço e etapa são filtros aqui (query
+# string ?tipo_servico=&etapa=), não fazem parte da seleção inicial.
 # ---------------------------------------------------------------------
 @app.route("/painel")
 @login_obrigatorio
@@ -104,11 +114,21 @@ def painel():
     if not filtro:
         return redirect(url_for("selecao"))
 
-    dados = oracle_db.get_solicitacoes(**filtro)
+    tipo_servico = request.args.get("tipo_servico") or None
+    etapa = request.args.get("etapa") or None
+    dados = oracle_db.get_solicitacoes(
+        empresa=filtro.get("empresa"), filial=filtro.get("filial"),
+        tipo_servico=tipo_servico, etapa=etapa,
+    )
 
     nome_empresa = dict(EMPRESAS).get(int(filtro["empresa"]), "")
     nome_filial = dict(FILIAIS).get(filtro["filial"]) if filtro.get("filial") else "todas as filiais"
     contexto = f"Empresa {filtro['empresa']} — {nome_empresa}, {nome_filial}"
+
+    tipos_servico = oracle_db.get_tipos_servico()
+    etapas = oracle_db.get_etapas()
+    tipo_servico_nome = next((nome for cod, nome in tipos_servico if str(cod) == tipo_servico), None)
+    etapa_nome = next((nome for cod, nome in etapas if str(cod) == etapa), None)
 
     return render_template(
         "painel.html",
@@ -116,6 +136,9 @@ def painel():
         solicitados=dados["solicitados"],
         em_separacao=dados["em_separacao"],
         atendidos=dados["atendidos"],
+        tipos_servico=tipos_servico, etapas=etapas,
+        tipo_servico_selecionado=tipo_servico, etapa_selecionada=etapa,
+        tipo_servico_nome=tipo_servico_nome, etapa_nome=etapa_nome,
         data_hoje=datetime.now().strftime("%d/%m/%Y"),
         hora_agora=datetime.now().strftime("%H:%M"),
     )
@@ -151,52 +174,49 @@ def assumir_solicitacao(codemp, codfil, numsol):
 def detalhe_solicitacao(codemp, codfil, numsol):
     dados = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
     try:
-        observacoes = oracle_db.get_observacoes_solicitacao(codemp, codfil, numsol)
+        observacao_itens = oracle_db.get_observacao_solicitacao(codemp, codfil, numsol)
     except Exception:
-        observacoes = {}  # coluna usu_obsite ainda não existe no Oracle
-    for item in dados["itens"]:
-        item["observacao"] = observacoes.get(item["seqite"])
+        observacao_itens = None  # coluna usu_obsite ainda não existe no Oracle
     return render_template(
         "detalhe_solicitacao.html",
         solicitacao=dados["solicitacao"],
         itens=dados["itens"],
+        observacao_itens=observacao_itens,
         codemp=codemp, codfil=codfil, numsol=numsol,
     )
 
-
 # ---------------------------------------------------------------------
-# Observação do item (grava direto na T120SIT do Sapiens - substitui o
-# antigo comentário local em SQLite). Depende da coluna usu_obsite existir
-# no Oracle (ver README); se ainda não existir, mostra aviso claro em vez
-# de deixar o erro do Oracle estourar pro usuário.
+# Observação da solicitação (botão único no cabeçalho - grava direto na
+# T120SIT do Sapiens, usu_obsite, aplicado em TODOS os itens da
+# solicitação de uma vez; antes era um botão por item). Depende da coluna
+# usu_obsite existir no Oracle (ver README); se ainda não existir, mostra
+# aviso claro em vez de deixar o erro do Oracle estourar pro usuário.
 # ---------------------------------------------------------------------
-@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/observacao", methods=["GET", "POST"])
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/observacao", methods=["GET", "POST"])
 @login_obrigatorio
-def observacao_item(codemp, codfil, numsol, seqite):
+def observacao_solicitacao(codemp, codfil, numsol):
     if request.method == "POST":
         observacao = request.form.get("observacao", "")
         try:
-            oracle_db.salvar_observacao_item(codemp, codfil, numsol, seqite, observacao)
+            oracle_db.salvar_observacao_solicitacao(codemp, codfil, numsol, observacao)
             return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
         except Exception:
             return render_template(
-                "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+                "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
                 observacao=observacao,
                 erro="Não foi possível salvar - o campo de observação (usu_obsite) ainda não existe na T120SIT.",
             )
     try:
-        observacao = oracle_db.get_observacao_item(codemp, codfil, numsol, seqite)
+        observacao = oracle_db.get_observacao_solicitacao(codemp, codfil, numsol)
     except Exception:
         observacao = ""
     return render_template(
-        "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+        "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
         observacao=observacao,
     )
 
-
 # ---------------------------------------------------------------------
-# Cancelar item na solicitação (só mexe na T120SIT - não chama o
-# webservice do pedido, não mexe no E120IPD)
+# Cancelar item na solicitação (só salva na T120SIT)
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/cancelar", methods=["GET", "POST"])
 @login_obrigatorio
@@ -206,7 +226,9 @@ def cancelar_item(codemp, codfil, numsol, seqite):
         return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
     erro = None
+    motivo = ""
     if request.method == "POST":
+        motivo = request.form.get("motivo", "").strip()
         try:
             qtd = float(request.form.get("qtd", "0").replace(",", "."))
         except ValueError:
@@ -214,14 +236,13 @@ def cancelar_item(codemp, codfil, numsol, seqite):
         if qtd <= 0 or qtd > item["qtd_aberta"]:
             erro = f"Quantidade inválida - máximo {item['qtd_aberta']} (qtd. aberta)."
         else:
-            oracle_db.cancelar_item_solicitacao(codemp, codfil, numsol, seqite, qtd)
+            oracle_db.cancelar_item_solicitacao(codemp, codfil, numsol, seqite, qtd, motivo=motivo)
             return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
     return render_template(
         "cancelar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-        item=item, erro=erro,
+        item=item, erro=erro, motivo=motivo,
     )
-
 
 # ---------------------------------------------------------------------
 # Inserir peça nova na solicitação + no pedido (webservice GravarPedidos).
@@ -254,9 +275,13 @@ def inserir_item(codemp, codfil, numsol, seqite):
         else:
             produto = oracle_db.buscar_produto_preco(codemp, codfil, item["numped"], codpro_novo)
             if not produto:
-                erro = f"Produto {codpro_novo} não encontrado."
+                erro = f"Produto {codpro_novo} não foi encontrado."
             elif not produto["ativo"]:
                 erro = f"Produto {codpro_novo} está inativo."
+            elif not produto["preco"]:
+                erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
+            elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], codpro_novo):
+                erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
 
         if not erro and request.form.get("confirmar"):
             try:
@@ -277,7 +302,6 @@ def inserir_item(codemp, codfil, numsol, seqite):
         item=item, produto=produto, qtd=qtd, codpro_novo=codpro_novo, erro=erro,
     )
 
-
 # ---------------------------------------------------------------------
 # Troca de peça: cancela o item substituído no pedido + na solicitação e
 # inclui o item novo no pedido + na solicitação (usu_indtrc='S'). Mesma
@@ -295,10 +319,17 @@ def trocar_item(codemp, codfil, numsol, seqite):
     if item["seqipd"]:
         item_pedido = oracle_db.get_item_pedido(codemp, codfil, item["numped"], item["seqipd"])
 
+    cabecalho = oracle_db.get_solicitacao_cabecalho(codemp, codfil, numsol)
+    motor_completo = cabecalho["tipo_servico"].strip().lower() == TIPO_SERVICO_MOTOR_COMPLETO.lower()
+
     erro = None
     produto = None
     codpro_novo = ""
     qtd = 0
+    diferenca_preco = None
+    alerta_preco = False
+    mostrar_confirmacao = False
+    autorizado_por = request.form.get("autorizado_por", "").strip()
 
     if request.method == "POST":
         codpro_novo = request.form.get("codpro_novo", "").strip()
@@ -313,11 +344,35 @@ def trocar_item(codemp, codfil, numsol, seqite):
         else:
             produto = oracle_db.buscar_produto_preco(codemp, codfil, item["numped"], codpro_novo)
             if not produto:
-                erro = f"Produto {codpro_novo} não encontrado."
+                erro = f"Produto {codpro_novo} não foi encontrado."
             elif not produto["ativo"]:
                 erro = f"Produto {codpro_novo} está inativo."
+            elif not produto["preco"]:
+                erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
+            elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], codpro_novo):
+                erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
 
-        if not erro and request.form.get("confirmar"):
+        # Produto passou por todas as checagens - mostra a etapa de
+        # confirmação mesmo que a autorização de preço ainda falte (ver
+        # abaixo); só volta pra etapa 1 se o produto em si for inválido.
+        mostrar_confirmacao = produto is not None and erro is None
+
+        # Diferença de preço (produto novo x substituído) só é exibida quando
+        # passa da tolerância: 10% do preço atual (substituído), ou R$ 200,00
+        # fixo quando a solicitação é de "motor completo" (tipo de serviço).
+        # Dentro da tolerância a tela pula direto pra confirmação simples.
+        if mostrar_confirmacao and item_pedido and item_pedido["preco_unitario"] is not None:
+            diferenca_preco = produto["preco"] - item_pedido["preco_unitario"]
+            limite = (
+                TOLERANCIA_PRECO_TROCA_MOTOR_COMPLETO if motor_completo
+                else abs(item_pedido["preco_unitario"]) * TOLERANCIA_PRECO_TROCA_PERCENTUAL
+            )
+            alerta_preco = abs(diferenca_preco) > limite
+
+        if mostrar_confirmacao and request.form.get("confirmar") and alerta_preco and not autorizado_por:
+            erro = "A diferença de preço passou da tolerância - informe quem autorizou a troca."
+
+        if mostrar_confirmacao and not erro and request.form.get("confirmar"):
             try:
                 pedido_ws.cancelar_item_pedido(
                     codemp, codfil, item["numped"], item["seqipd"], qtd, session["usuario"],
@@ -332,10 +387,16 @@ def trocar_item(codemp, codfil, numsol, seqite):
                         codemp, codfil, item["numped"], codpro_novo, qtd,
                         produto["preco"], produto["codtab"], session["usuario"],
                     )
-                    oracle_db.inserir_item_solicitacao(
+                    seqite_novo = oracle_db.inserir_item_solicitacao(
                         codemp, codfil, numsol, item["numped"], seqipd_novo, codpro_novo,
                         produto["descricao"], qtd, session["usuario"], veio_de_troca=True,
                     )
+                    if alerta_preco:
+                        oracle_db.salvar_observacao_item(
+                            codemp, codfil, numsol, seqite_novo,
+                            f"Troca autorizada por: {autorizado_por} "
+                            f"(diferença de preço R$ {diferenca_preco:.2f})",
+                        )
                     return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
                 except pedido_ws.PedidoWebserviceError as e:
                     erro = (
@@ -346,19 +407,21 @@ def trocar_item(codemp, codfil, numsol, seqite):
     return render_template(
         "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
         item=item, item_pedido=item_pedido, produto=produto, qtd=qtd, codpro_novo=codpro_novo, erro=erro,
+        diferenca_preco=diferenca_preco, alerta_preco=alerta_preco, autorizado_por=autorizado_por,
+        mostrar_confirmacao=mostrar_confirmacao,
     )
 
 
 # ---------------------------------------------------------------------
 # Itens equivalentes (E075EQUI) - consulta, sem gravação
 # ---------------------------------------------------------------------
-@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<codpro>/equivalentes")
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/equivalentes/<codpro>")
 @login_obrigatorio
-def equivalentes_item(codemp, codfil, numsol, codpro):
+def equivalentes_item(codemp, codfil, numsol, seqite, codpro):
     equivalentes = oracle_db.get_equivalentes(codemp, codpro)
     return render_template(
         "equivalentes_item.html",
-        codemp=codemp, codfil=codfil, numsol=numsol, codpro=codpro,
+        codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite, codpro=codpro,
         equivalentes=equivalentes,
     )
 

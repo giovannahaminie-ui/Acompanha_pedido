@@ -8,9 +8,9 @@
       <span class="eyebrow">Passo 2 de 2</span>
       <h1>Escolha o que você quer acompanhar.</h1>
       <p class="lead">
-        Filtre por empresa, filial, tipo de serviço e etapa — o painel se
-        ajusta na hora, e você pode trocar essa seleção quando quiser sem
-        precisar logar de novo.
+        Filtre por empresa e filial — o tipo de serviço e a etapa você
+        ajusta depois, direto no painel. Você pode trocar essa seleção
+        quando quiser sem precisar logar de novo.
       </p>
       <div class="hero-points">
         <div class="hero-point">
@@ -64,42 +64,6 @@
                 <div class="ux-option-item selected" data-value="">Todas as filiais</div>
                 {% for cod, nome in filiais %}
                   <div class="ux-option-item" data-value="{{ cod }}">{{ cod }} — {{ nome }}</div>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-
-          <!-- Tipo de Serviço -->
-          <div class="field">
-            <label>Tipo de serviço</label>
-            <input type="hidden" name="tipo_servico" id="tipo_servico" value="">
-            <div class="ux-select-wrapper">
-              <div class="ux-select-trigger">
-                <span class="ux-selected-text">Todos</span>
-                <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </div>
-              <div class="ux-options-menu">
-                <div class="ux-option-item selected" data-value="">Todos</div>
-                {% for cod, nome in tipos_servico %}
-                  <div class="ux-option-item" data-value="{{ cod }}">{{ nome }}</div>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-
-          <!-- Etapa -->
-          <div class="field">
-            <label>Etapa</label>
-            <input type="hidden" name="etapa" id="etapa" value="">
-            <div class="ux-select-wrapper">
-              <div class="ux-select-trigger">
-                <span class="ux-selected-text">Todas</span>
-                <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </div>
-              <div class="ux-options-menu">
-                <div class="ux-option-item selected" data-value="">Todas</div>
-                {% for cod, nome in etapas %}
-                  <div class="ux-option-item" data-value="{{ cod }}">{{ nome }}</div>
                 {% endfor %}
               </div>
             </div>

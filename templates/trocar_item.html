@@ -28,7 +28,7 @@
           <div class="info-card"><div class="info-card-head">Faturada</div><div class="info-card-value">{{ item_pedido.qtd_faturada }}</div></div>
         </div>
 
-        {% if produto and not erro %}
+        {% if mostrar_confirmacao %}
           {# ---- etapa 2: comparação de preço + confirmação ---- #}
           <div class="field">
             <label>Produto novo</label>
@@ -39,29 +39,36 @@
             <input type="text" value="{{ qtd }}" disabled>
           </div>
 
-          <div class="info-cards" style="margin-bottom:1.2rem;">
-            <div class="info-card">
-              <div class="info-card-head">Preço atual (substituído)</div>
-              <div class="info-card-value">{{ '%.2f'|format(item_pedido.preco_unitario) if item_pedido.preco_unitario is not none else '—' }}</div>
+          {% if alerta_preco %}
+            <div class="alert">
+              A diferença de preço entre o produto substituído e o produto novo passou da tolerância — confira antes de confirmar.
             </div>
-            <div class="info-card">
-              <div class="info-card-head">Preço do produto novo</div>
-              <div class="info-card-value">{{ '%.2f'|format(produto.preco) if produto.preco is not none else 'sem preço cadastrado' }}</div>
-            </div>
-            <div class="info-card">
-              <div class="info-card-head">Diferença</div>
-              <div class="info-card-value">
-                {% if produto.preco is not none and item_pedido.preco_unitario is not none %}
-                  {{ '%.2f'|format(produto.preco - item_pedido.preco_unitario) }}
-                {% else %}—{% endif %}
+            <div class="info-cards" style="margin-bottom:1.2rem;">
+              <div class="info-card">
+                <div class="info-card-head">Preço atual (substituído)</div>
+                <div class="info-card-value">{{ '%.2f'|format(item_pedido.preco_unitario) if item_pedido.preco_unitario is not none else '—' }}</div>
+              </div>
+              <div class="info-card">
+                <div class="info-card-head">Preço do produto novo</div>
+                <div class="info-card-value">{{ '%.2f'|format(produto.preco) }}</div>
+              </div>
+              <div class="info-card">
+                <div class="info-card-head">Diferença</div>
+                <div class="info-card-value">{{ '%.2f'|format(diferenca_preco) }}</div>
               </div>
             </div>
-          </div>
+          {% endif %}
 
           <form method="POST">
             <input type="hidden" name="codpro_novo" value="{{ codpro_novo }}">
             <input type="hidden" name="qtd" value="{{ qtd }}">
             <input type="hidden" name="confirmar" value="1">
+            {% if alerta_preco %}
+              <div class="field">
+                <label for="autorizado_por">Quem autorizou a troca (diferença acima da tolerância)</label>
+                <input type="text" id="autorizado_por" name="autorizado_por" value="{{ autorizado_por }}" required autofocus>
+              </div>
+            {% endif %}
             <div style="display:flex; gap:0.75rem;">
               <a href="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}" class="btn" style="flex:1; justify-content:center;">
                 Voltar

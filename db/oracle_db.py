@@ -149,6 +149,7 @@ def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None):
     """
     Retorna as solicitações já separadas por etapa (solicitado / em
     separação / atendido), prontas para o painel.
+
     """
     conn = get_connection()
     cur = conn.cursor()
@@ -180,6 +181,7 @@ def _fmt_hora(valor):
     Os campos USU_HORSOL/HORSEP/HORCON/HORENT guardam a hora como minutos
     desde a meia-noite (ex: 828 = 13:48, não 08:28 convertendo
     como HHMM, ~38% dos registros reais). 0/None = sem horário registrado ainda.
+
     """
     if not valor:
         return ""
@@ -188,8 +190,11 @@ def _fmt_hora(valor):
 
 
 def _fmt_qtd(valor):
-    """Quantidades vêm do Oracle como NUMBER (ex: 1.0) - exibir sem casas
-    decimais quando o valor for inteiro (1, não 1.0)."""
+    """
+    Quantidades vêm do Oracle como NUMBER (ex: 1.0) - exibir sem casas
+    decimais quando o valor for inteiro (1, não 1.0).
+    
+    """
     if valor is None:
         return 0
     return int(valor) if valor == int(valor) else valor
@@ -288,8 +293,8 @@ select case when e.codemp=2 and e.coddep='1' then 'RTL LD'
 where e.codemp in (2,5) AND coddep in ('1','2')
 and e.codpro=p.codpro and e.codemp=p.codemp and case when p.codemp=2 then p.codpro when p.codemp=5 then p.usu_codpro2 end =:codprofab
 and not (e.coddep='2' and e.codemp=5)
-"""
 
+"""
 
 SQL_CLIENTE_PEDIDO = """
                 SELECT c.nomcli, c.cidcli, c.sigufs, r.codrep, r.nomrep
@@ -341,6 +346,7 @@ def get_solicitacao_cabecalho(codemp, codfil, numsol):
         "observacao": (cab.get("usu_obssol") or "").strip(),
         "memorando": (cab.get("usu_obscon") or "").strip(),
         "observacao_pedido": (cab.get("obsped") or "").strip(),
+        "tipo_servico": (cab.get("usu_destsv") or "").strip(),
     }
 
 
@@ -364,7 +370,6 @@ def _saldos_por_deposito(cur, codemp, codpro1, codpro2):
         {"deposito": dep, "saldo": int(sld)}
         for dep, sld in cur.fetchall() if sld and int(sld) > 0
     ]
-
 
 def get_solicitacao_detalhe(codemp, codfil, numsol):
     """Cabeçalho + itens + saldo de estoque, para a segunda tela."""
@@ -403,7 +408,6 @@ def get_solicitacao_detalhe(codemp, codfil, numsol):
 
     return {"solicitacao": solicitacao, "itens": itens}
 
-
 # ---------------------------------------------------------------------
 # Busca de itens equivalentes (botão "Equivalentes" na segunda tela)
 # Junta E075PRO (marca/descrição do produto equivalente) e E075DER
@@ -430,7 +434,6 @@ SQL_EQUIVALENTES = """
                 AND eq.codpro = :codpro
 """
 
-
 def get_equivalentes(codemp, codpro):
     conn = get_connection()
     cur = conn.cursor()
@@ -443,6 +446,7 @@ def get_equivalentes(codemp, codpro):
         saldos = _saldos_por_deposito(cur, codemp, row["proeqi"], row["usu_codpro2"])
         equivalentes.append({
             "codigo": row["proeqi"],
+            "profor": (row["usu_codpro2"] or "").strip() or None,
             "descricao": (row["despro"] or row["dereqi"] or "").strip(),
             "marca": (row["codmar"] or "").strip() or None,
             "derivacao": (row["desder"] or "").strip() or None,
@@ -478,24 +482,53 @@ def assumir_solicitacao(codemp, codfil, numsol, usuario_separador):
     conn.close()
     return True
 
-
 # ---------------------------------------------------------------------
 # Cancelar item na solicitação (botão "Cancelar" - só mexe na T120SIT,
 # não chama o webservice do pedido)
 # ---------------------------------------------------------------------
 SQL_ITEM_SOLICITACAO_POR_SEQITE = """
+
                 SELECT usu_qtdabe, usu_qtdcan, usu_numped, usu_seqipd, usu_codpro
                 FROM sapiens.usu_t120sit
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
                 AND usu_numsol=:numsol AND usu_seqite=:seqite
+
 """
 
-SQL_CANCELAR_ITEM_SOLICITACAO = """
+#  Cancelamento em 3 passos - mesmo padrão usado no cancelamento do item
+#  antigo na troca (SeqSolOld lá, usu_seqite aqui): sempre mexe no ITEM
+#  (usu_seqite), nunca na solicitação inteira.
+#  1) soma qtd em qtdcan / subtrai de qtdabe, marca sitite=2 (parcial);
+#  2) se qtdcan bateu com qtdsol, sitite vira 3 (cancelado);
+#  3) se ainda sobrou qtdsol > qtdcan, garante sitite=2 (parcial).
+#  Os updates 2 e 3 são mutuamente exclusivos pela condição de qtd, e todos
+#  ignoram item que já está com sitite=3 (não "reabre" um item cancelado).
+SQL_CANCELAR_ITEM_SOLICITACAO_QTD = """
                 UPDATE sapiens.usu_t120sit
-                    SET usu_qtdabe = usu_qtdabe - :qtd,
-                    usu_qtdcan = usu_qtdcan + :qtd
+                    SET usu_qtdcan = usu_qtdcan + :qtd,
+                        usu_qtdabe = usu_qtdabe - :qtd,
+                        usu_sitite = 2
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
                 AND usu_numsol=:numsol AND usu_seqite=:seqite
+                AND usu_sitite <> 3
+"""
+
+SQL_CANCELAR_ITEM_SOLICITACAO_TOTAL = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_sitite = 3
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                AND usu_qtdsol = usu_qtdcan
+                AND usu_sitite <> 3
+"""
+
+SQL_CANCELAR_ITEM_SOLICITACAO_PARCIAL = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_sitite = 2
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                AND usu_qtdsol > usu_qtdcan
+                AND usu_sitite <> 3
 """
 
 
@@ -516,15 +549,32 @@ def get_item_solicitacao(codemp, codfil, numsol, seqite):
         "numped": numped, "seqipd": seqipd, "codpro": codpro,
     }
 
-def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, qtd):
+def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, qtd, motivo=None):
     """Cancela `qtd` unidades do item na solicitação (T120SIT) - move de
-    qtd_aberta pra qtd_cancelada. Não mexe no pedido nem chama webservice."""
+    qtd_aberta pra qtd_cancelada e recalcula usu_sitite (2=parcial,
+    3=cancelado). Não mexe no pedido nem chama webservice. Sempre no
+    item (usu_seqite) - nunca na solicitação inteira. Se `motivo` vier
+    preenchido, grava no usu_obsite do mesmo item (mesma coluna usada pela
+    observação da solicitação)."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        SQL_CANCELAR_ITEM_SOLICITACAO,
+        SQL_CANCELAR_ITEM_SOLICITACAO_QTD,
         qtd=qtd, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
     )
+    cur.execute(
+        SQL_CANCELAR_ITEM_SOLICITACAO_TOTAL,
+        codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+    )
+    cur.execute(
+        SQL_CANCELAR_ITEM_SOLICITACAO_PARCIAL,
+        codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+    )
+    if motivo and motivo.strip():
+        cur.execute(
+            SQL_SALVAR_OBSERVACAO_ITEM,
+            obs=motivo.strip(), codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+        )
     conn.commit()
     conn.close()
     return True
@@ -548,7 +598,6 @@ SQL_OBSERVACAO_ITEM = """
                 AND usu_numsol=:numsol AND usu_seqite=:seqite
 """
 
-
 def get_observacao_item(codemp, codfil, numsol, seqite):
     conn = get_connection()
     cur = conn.cursor()
@@ -557,22 +606,55 @@ def get_observacao_item(codemp, codfil, numsol, seqite):
     conn.close()
     return (row[0] or "").strip() if row and row[0] else ""
 
-
 def get_observacoes_solicitacao(codemp, codfil, numsol):
     """{seqite: observacao} de todos os itens da solicitação, pra destacar na
-    listagem quais já têm observação - igual o antigo comentário local fazia.
-    Levanta a mesma exceção do Oracle (ORA-00904) se usu_obsite ainda não
-    existir; quem chama decide como tratar (ver detalhe_solicitacao em app.py)."""
+    listagem quais já têm observação.
+    """
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "SELECT usu_seqite, usu_obsite FROM sapiens.usu_t120sit "
+        "SELECT usu_seqite, usu_obsite " \
+        "FROM sapiens.usu_t120sit "
         "WHERE usu_codemp=:codemp AND usu_codfil=:codfil AND usu_numsol=:numsol",
         codemp=codemp, codfil=codfil, numsol=numsol,
     )
     rows = cur.fetchall()
     conn.close()
     return {seqite: obs.strip() for seqite, obs in rows if obs}
+
+
+# ---------------------------------------------------------------------
+# Observação única da solicitação (botão que ficava "por item" nas ações
+# agora é um único botão no cabeçalho) - continua gravando no usu_obsite
+# da usu_t120sit, só que sem filtro de usu_seqite: aplica o mesmo texto em
+# TODOS os itens da solicitação de uma vez.
+# ---------------------------------------------------------------------
+SQL_SALVAR_OBSERVACAO_SOLICITACAO = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_obsite = :obs
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol
+"""
+
+
+def get_observacao_solicitacao(codemp, codfil, numsol):
+    """Observação atual da solicitação, pra pré-preencher a caixa do
+    cabeçalho - pega a primeira não-vazia entre os itens (todos devem ter
+    o mesmo texto, já que salvar_observacao_solicitacao aplica em todos)."""
+    observacoes = get_observacoes_solicitacao(codemp, codfil, numsol)
+    return next(iter(observacoes.values()), "")
+
+
+def salvar_observacao_solicitacao(codemp, codfil, numsol, observacao):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        SQL_SALVAR_OBSERVACAO_SOLICITACAO,
+        obs=observacao.strip(), codemp=codemp, codfil=codfil, numsol=numsol,
+    )
+    conn.commit()
+    conn.close()
+    return True
 
 
 def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
@@ -585,7 +667,6 @@ def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
     conn.commit()
     conn.close()
     return True
-
 
 # ---------------------------------------------------------------------
 # Validação de produto novo + preço (botões "Trocar" e "Inserir peça").
@@ -622,6 +703,7 @@ def buscar_produto_preco(codemp, codfil, numped, codpro):
     pela tabela de preço do pedido em questão. Retorna None se o produto não
     existir; retorna dict com preco=None se existir mas não tiver preço
     vigente cadastrado (a tela decide o que fazer nesse caso).
+
     """
     conn = get_connection()
     cur = conn.cursor()
@@ -650,6 +732,58 @@ def buscar_produto_preco(codemp, codfil, numped, codpro):
 
 
 # ---------------------------------------------------------------------
+# Validação adicional de produto novo (regra "SQL_PRODUTO_ATIVO_PRECO"):
+# além do preço vigente (já checado por buscar_produto_preco acima), o
+# produto precisa ter ligação com o depósito da filial do pedido (linha em
+# E210EST) - sem isso não dá pra separar/retirar o item. A regra
+# filial->depósito é a mesma já usada no JOIN de SQL_ITENS_SOLICITACAO
+# (empresa 1: L=1, P=3, C=5; empresa 5/12: sempre 1).
+# Quem chama decide a mensagem de parada (ver app.py, rotas
+# inserir_item/trocar_item):
+#   - produto=None (buscar_produto_preco)                -> "não encontrado"
+#   - produto["preco"] nulo ou 0                          -> "não possui preço"
+#   - produto_tem_ligacao_deposito(...) == False           -> "sem ligação com o depósito"
+# ---------------------------------------------------------------------
+SQL_FILIAL_PEDIDO = "SELECT usu_filexe FROM sapiens.e120ped WHERE codemp=:codemp AND codfil=:codfil AND numped=:numped"
+
+SQL_DEPOSITO_LIGADO_PRODUTO = """
+                SELECT MAX(e.coddep) FROM sapiens.e210est e
+                WHERE e.codemp=:codemp AND e.codpro=:codpro AND e.coddep=:coddep_esperado
+"""
+
+
+def _coddep_esperado(codemp, filexe):
+    """Mesma regra filial->depósito do JOIN em SQL_ITENS_SOLICITACAO."""
+    filexe = (filexe or "").strip().upper()
+    if codemp == 1:
+        return {"L": "1", "P": "3", "C": "5"}.get(filexe)
+    if codemp in (5, 12):
+        return "1"
+    return None
+
+
+def produto_tem_ligacao_deposito(codemp, codfil, numped, codpro):
+    """True se o produto tiver linha em E210EST no depósito ligado à filial
+    do pedido (coddep nulo/0 ou sem linha = sem ligação)."""
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(SQL_FILIAL_PEDIDO, codemp=codemp, codfil=codfil, numped=numped)
+    filial_row = cur.fetchone()
+    filexe = (filial_row[0] or "").strip() if filial_row else ""
+    coddep_esperado = _coddep_esperado(codemp, filexe)
+    if not coddep_esperado:
+        conn.close()
+        return False
+
+    cur.execute(SQL_DEPOSITO_LIGADO_PRODUTO, codemp=codemp, codpro=codpro, coddep_esperado=coddep_esperado)
+    coddep_row = cur.fetchone()
+    conn.close()
+    coddep = coddep_row[0] if coddep_row else None
+    return bool(coddep) and str(coddep).strip() not in ("", "0")
+
+
+# ---------------------------------------------------------------------
 # Situação do item no pedido (E120IPD) - qtd aberta/cancelada/faturada,
 # usado na tela de troca pra checar antes de trocar.
 # ---------------------------------------------------------------------
@@ -658,7 +792,6 @@ SQL_ITEM_PEDIDO = """
                 FROM sapiens.e120ipd
                 WHERE codemp=:codemp AND codfil=:codfil AND numped=:numped AND seqipd=:seqipd
 """
-
 
 def get_item_pedido(codemp, codfil, numped, seqipd):
     conn = get_connection()

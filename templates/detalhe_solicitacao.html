@@ -90,6 +90,19 @@
     </div>
     <div class="info-card-value" style="font-weight:500;">{{ solicitacao.memorando or '—' }}</div>
   </div>
+
+  <div class="info-card">
+    <div class="info-card-head" style="justify-content:space-between;">
+      <span style="display:flex; align-items:center; gap:0.4rem;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        Observação dos itens
+      </span>
+      <a href="{{ url_for('observacao_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn btn-icone" title="Editar observação (aplica em todos os itens)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+      </a>
+    </div>
+    <div class="info-card-value" style="font-weight:500;">{{ observacao_itens or '—' }}</div>
+  </div>
 </div>
 
 <p class="section-title">Itens solicitados e saldo por depósito</p>
@@ -97,13 +110,13 @@
 <div class="table-card">
   <table>
     <colgroup>
-      <col style="width:7%">
-      <col style="width:6%">
-      <col style="width:15%">
-      <col style="width:13%">
       <col style="width:6%">
       <col style="width:5%">
-      <col style="width:3%"><col style="width:3%"><col style="width:3%"><col style="width:3%"><col style="width:3%"><col style="width:3%"><col style="width:3%">
+      <col style="width:12%">
+      <col style="width:11%">
+      <col style="width:5%">
+      <col style="width:5%">
+      <col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%">
       <col style="width:11%">
       <col style="width:12%">
     </colgroup>
@@ -115,18 +128,18 @@
         <th rowspan="2">Descrição (solicitação)</th>
         <th rowspan="2">Marca</th>
         <th rowspan="2">Endereço</th>
-        <th colspan="7" style="text-align:center;">Qtd.</th>
+        <th colspan="7" class="th-qtd-group" style="text-align:center;">Qtd.</th>
         <th rowspan="2">Saldo por depósito</th>
         <th rowspan="2">Ações</th>
       </tr>
       <tr>
-        <th style="text-align:center;">Solic.</th>
-        <th style="text-align:center;">Atend.</th>
-        <th style="text-align:center;">Aberta</th>
-        <th style="text-align:center;">Can.</th>
-        <th style="text-align:center;">Mov.</th>
-        <th style="text-align:center;">MSO</th>
-        <th style="text-align:center;">Dev.</th>
+        <th class="th-qtd" style="text-align:center;">Solic.</th>
+        <th class="th-qtd" style="text-align:center;">Atend.</th>
+        <th class="th-qtd" style="text-align:center;">Aberta</th>
+        <th class="th-qtd" style="text-align:center;">Can.</th>
+        <th class="th-qtd" style="text-align:center;">Mov.</th>
+        <th class="th-qtd" style="text-align:center;">MSO</th>
+        <th class="th-qtd" style="text-align:center;">Dev.</th>
       </tr>
     </thead>
     <tbody>
@@ -146,25 +159,22 @@
         <td style="text-align:center;">{{ item.qtd_mso }}</td>
         <td style="text-align:center;">{{ item.qtd_devolvida }}</td>
         <td>
-          {% for dep in item.saldos %}
-            <span class="badge badge-ok">
-              {{ dep.deposito }} {{ dep.saldo }}
-            </span>
-          {% else %}
-            <span class="badge badge-zero">sem saldo</span>
-          {% endfor %}
+          <div class="saldo-lista">
+            {% for dep in item.saldos %}
+              <span class="badge badge-ok">
+                {{ dep.deposito }} {{ dep.saldo }}
+              </span>
+            {% else %}
+              <span class="badge badge-zero">sem saldo</span>
+            {% endfor %}
+          </div>
         </td>
         <td class="item-acoes">
           <a href="{{ url_for('cancelar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
              class="btn btn-icone" title="Cancelar item na solicitação">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
           </a>
-          <a href="{{ url_for('observacao_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
-             class="btn btn-icone {{ 'tem-observacao' if item.observacao else '' }}"
-             title="{{ item.observacao if item.observacao else 'Adicionar observação' }}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-          </a>
-          <a href="{{ url_for('equivalentes_item', codemp=codemp, codfil=codfil, numsol=numsol, codpro=item.codpro1) }}"
+          <a href="{{ url_for('equivalentes_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite, codpro=item.codpro1) }}"
              class="btn btn-icone" title="Buscar equivalentes">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           </a>

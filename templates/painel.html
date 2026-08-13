@@ -29,6 +29,43 @@
       </div>
     </div>
 
+    <!-- FILTROS (tipo de serviço / etapa) -->
+    <form method="GET" id="form-filtros-painel" class="painel-filtros">
+      <div class="painel-filtro-campo">
+        <label>Tipo de serviço</label>
+        <input type="hidden" name="tipo_servico" id="tipo_servico" value="{{ tipo_servico_selecionado or '' }}">
+        <div class="ux-select-wrapper ux-select-compact">
+          <div class="ux-select-trigger">
+            <span class="ux-selected-text">{{ tipo_servico_nome or 'Todos os tipos de serviço' }}</span>
+            <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="ux-options-menu">
+            <div class="ux-option-item {{ 'selected' if not tipo_servico_selecionado else '' }}" data-value="">Todos os tipos de serviço</div>
+            {% for cod, nome in tipos_servico %}
+              <div class="ux-option-item {{ 'selected' if tipo_servico_selecionado == cod|string else '' }}" data-value="{{ cod }}">{{ nome }}</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="painel-filtro-campo">
+        <label>Etapa</label>
+        <input type="hidden" name="etapa" id="etapa" value="{{ etapa_selecionada or '' }}">
+        <div class="ux-select-wrapper ux-select-compact">
+          <div class="ux-select-trigger">
+            <span class="ux-selected-text">{{ etapa_nome or 'Todas as etapas' }}</span>
+            <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="ux-options-menu">
+            <div class="ux-option-item {{ 'selected' if not etapa_selecionada else '' }}" data-value="">Todas as etapas</div>
+            {% for cod, nome in etapas %}
+              <div class="ux-option-item {{ 'selected' if etapa_selecionada == cod|string else '' }}" data-value="{{ cod }}">{{ nome }}</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </form>
+
     <!-- ÁREA DAS COLUNAS -->
     <div class="painel-grid">
 
@@ -165,5 +202,37 @@
     const url = `/solicitacao/assumir/${codemp}/${codfil}/${numsol}`;
     window.location.href = url;
   }
+
+  // Selects customizados dos filtros (tipo de serviço / etapa) - ao
+  // escolher uma opção, grava no input escondido e já submete o form.
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('form-filtros-painel');
+    const wrappers = form.querySelectorAll('.ux-select-wrapper');
+
+    wrappers.forEach(wrapper => {
+      const trigger = wrapper.querySelector('.ux-select-trigger');
+      const options = wrapper.querySelectorAll('.ux-option-item');
+      const hiddenInput = wrapper.parentElement.querySelector('input[type="hidden"]');
+
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = wrapper.classList.contains('open');
+        wrappers.forEach(w => w.classList.remove('open'));
+        if (!isOpen) wrapper.classList.add('open');
+      });
+
+      options.forEach(option => {
+        option.addEventListener('click', (e) => {
+          e.stopPropagation();
+          hiddenInput.value = option.getAttribute('data-value');
+          form.submit();
+        });
+      });
+    });
+
+    document.addEventListener('click', () => {
+      wrappers.forEach(wrapper => wrapper.classList.remove('open'));
+    });
+  });
 </script>
 {% endblock %}
