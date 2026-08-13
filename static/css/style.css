@@ -326,7 +326,7 @@ label {
 .info-card .info-card-head svg { color: var(--red-600); flex: none; }
 .info-card .info-card-value { font-size: 1.02rem; font-weight: 700; color: var(--navy-900); line-height: 1.35; }
 .info-card .info-card-value.clamp {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 2; overflow: hidden;
 }
 .info-card .info-card-sub { font-size: 0.85rem; color: var(--text-mute); margin-top: 0.15rem; }
 .info-card-ver-mais {
