@@ -418,17 +418,21 @@ SQL_EQUIVALENTES = """
                        p.despro,
                        p.codmar,
                        p.usu_codpro2,
+                       d.desder,
                        t.prebas
                 FROM sapiens.E075EQI eq
                 JOIN sapiens.E075PRO p ON p.codemp = eq.codemp
                                       AND p.codpro = eq.proeqi
-                LEFT JOIN sapiens.E081IPT t ON t.codemp = p.codemp
+                LEFT JOIN sapiens.E075DER d ON d.codemp = eq.codemp
+                                      AND d.codpro = eq.proeqi
+                                      AND d.codder = eq.codder
+                LEFT JOIN sapiens.E081ITP t ON t.codemp = p.codemp
                                            AND t.codtpr = '001'
                                            AND t.codpro = p.codpro
                                            AND t.qtdmax = 999999999
-                                           AND t.datini = CASE WHEN p.codemp=1 then '01/04/2011'
-                                                               WHEN p.codemp=12 then '01/01/2023'
-                                                               WHEN p.codemp=5 then '01/04/2014' END
+                                           AND t.datini = CASE WHEN p.codemp=1 then TO_DATE('01/04/2011','DD/MM/YYYY')
+                                                               WHEN p.codemp=12 then TO_DATE('01/01/2023','DD/MM/YYYY')
+                                                               WHEN p.codemp=5 then TO_DATE('01/04/2014','DD/MM/YYYY') END
                 WHERE eq.codemp = :codemp
                 AND eq.codpro = :codpro
 """
@@ -449,6 +453,7 @@ def get_equivalentes(codemp, codpro):
             "descricao": (row["despro"] or row["dereqi"] or "").strip(),
             "marca": (row["codmar"] or "").strip() or None,
             "derivacao": (row["desder"] or "").strip() or None,
+            "preco": float(row["prebas"]) if row["prebas"] is not None else None,
             "saldos": saldos,
         })
     conn.close()
@@ -496,10 +501,32 @@ SQL_ITEM_SOLICITACAO_POR_SEQITE = """
 
 """
 
-SQL_CANCELAR_ITEM_SOLICITACAO = """
+SQL_ITEM_MOVIMENTACAO = """
+                SELECT usu_qtdmov FROM sapiens.usu_t120sit
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol AND usu_seqite=:seqite
+"""
+
+# Sem movimentação (usu_qtdmov = 0): cancela o item inteiro de uma vez.
+SQL_CANCELAR_ITEM_SOLICITACAO_TOTAL = """
                 UPDATE sapiens.usu_t120sit
-                    SET usu_qtdabe = usu_qtdabe - :qtd,
-                        usu_qtdcan = usu_qtdcan + :qtd
+                    SET usu_sitite = 3,
+                        usu_qtdcan = usu_qtdsol,
+                        usu_qtdate = 0,
+                        usu_qtdabe = 0,
+                        usu_obsite = :msgcan
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol AND usu_seqite=:seqite
+"""
+
+# Com movimentação (usu_qtdmov <> 0): cancela só o que ainda está aberto,
+# preserva usu_qtdate (não apaga o que já foi atendido/movimentado).
+SQL_CANCELAR_ITEM_SOLICITACAO_QTD_ABERTA = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_qtdcan = usu_qtdcan + usu_qtdabe,
+                        usu_sitite = CASE WHEN usu_qtdsol = usu_qtdcan + usu_qtdabe THEN 3 ELSE 2 END,
+                        usu_qtdabe = 0,
+                        usu_obsite = :msgcan
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
                 AND usu_numsol=:numsol AND usu_seqite=:seqite
 """
@@ -521,14 +548,98 @@ def get_item_solicitacao(codemp, codfil, numsol, seqite):
         "numped": numped, "seqipd": seqipd, "codpro": codpro,
     }
 
-def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, qtd):
-    """Cancela `qtd` unidades do item na solicitação (T120SIT) - move de
-    qtd_aberta pra qtd_cancelada. Não mexe no pedido nem chama webservice."""
+def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, usuario, motivo=None):
+    """Cancela o item na solicitação (T120SIT) - não mexe no pedido nem
+    chama webservice. A usu_obsite recebe uma mensagem gerada com
+    data/hora/usuário/motivo - SUBSTITUI o texto anterior (não concatena,
+    diferente da Observação de item/solicitação). Dois caminhos, decididos
+    pela usu_qtdmov atual do item:
+      - SEM movimentação (usu_qtdmov=0): cancela o item inteiro de uma vez
+        (usu_sitite=3, usu_qtdcan=usu_qtdsol, zera usu_qtdate/usu_qtdabe).
+      - COM movimentação (usu_qtdmov<>0): cancela só o que ainda está
+        aberto, preserva usu_qtdate (não apaga o que já foi
+        atendido/movimentado).
+    Usada só pelo botão "Cancelar" - a Troca de item usa
+    cancelar_qtd_item_solicitacao_troca (abaixo), que cancela só a
+    quantidade trocada, podendo deixar o resto do item em aberto."""
+    agora = datetime.now()
+    motivo_txt = (motivo or "").strip() or "sem motivo informado"
+    msgcan = f"Cancelado em {agora:%d/%m/%Y %H:%M} por {usuario} - motivo: {motivo_txt}"
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_ITEM_MOVIMENTACAO, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite)
+    row = cur.fetchone()
+    tem_movimentacao = bool(row and row[0])
+
+    sql = SQL_CANCELAR_ITEM_SOLICITACAO_QTD_ABERTA if tem_movimentacao else SQL_CANCELAR_ITEM_SOLICITACAO_TOTAL
+    cur.execute(sql, msgcan=msgcan, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite)
+    conn.commit()
+    conn.close()
+    return True
+
+
+# ---------------------------------------------------------------------
+# Cancelamento PARCIAL do item substituído numa Troca - diferente do botão
+# Cancelar (que sempre cancela o item inteiro): aqui só a quantidade que
+# está sendo trocada é cancelada (ex: 3 unidades solicitadas, troca só 1,
+# as outras 2 continuam em aberto no item original). 3 UPDATEs em
+# sequência, sempre filtrando pelo item (usu_seqite), nunca a solicitação
+# inteira:
+#  1) soma qtd em qtdcan / subtrai de qtdabe, marca sitite=2 (parcial);
+#  2) se qtdcan bateu com qtdsol (cancelou tudo que sobrava), sitite vira
+#     3 (cancelado);
+#  3) se ainda sobrou qtdsol > qtdcan, garante sitite=2 (parcial).
+# Passos 2 e 3 são mutuamente exclusivos pela condição de quantidade; todos
+# ignoram item já com sitite=3. Não mexe em usu_obsite (a Troca não coleta
+# motivo pra esse passo).
+# ---------------------------------------------------------------------
+SQL_CANCELAR_QTD_ITEM_TROCA = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_qtdcan = usu_qtdcan + :qtd,
+                        usu_qtdabe = usu_qtdabe - :qtd,
+                        usu_sitite = 2
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                AND usu_sitite <> 3
+"""
+
+SQL_CANCELAR_QTD_ITEM_TROCA_TOTAL_SE_COMPLETO = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_sitite = 3
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                AND usu_qtdsol = usu_qtdcan
+                AND usu_sitite <> 3
+"""
+
+SQL_CANCELAR_QTD_ITEM_TROCA_PARCIAL_SE_SOBROU = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_sitite = 2
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                AND usu_qtdsol > usu_qtdcan
+                AND usu_sitite <> 3
+"""
+
+
+def cancelar_qtd_item_solicitacao_troca(codemp, codfil, numsol, seqite, qtd):
+    """Cancela só `qtd` unidades do item substituído (usado pela Troca) -
+    pode deixar o resto do item em aberto se a troca for parcial. Não mexe
+    no pedido nem chama webservice, não mexe em usu_obsite."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        SQL_CANCELAR_ITEM_SOLICITACAO,
+        SQL_CANCELAR_QTD_ITEM_TROCA,
         qtd=qtd, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+    )
+    cur.execute(
+        SQL_CANCELAR_QTD_ITEM_TROCA_TOTAL_SE_COMPLETO,
+        codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+    )
+    cur.execute(
+        SQL_CANCELAR_QTD_ITEM_TROCA_PARCIAL_SE_SOBROU,
+        codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
     )
     conn.commit()
     conn.close()
@@ -545,22 +656,6 @@ SQL_SALVAR_OBSERVACAO_ITEM = """
                 AND usu_numsol=:numsol 
                 AND usu_seqite=:seqite
 """
-
-SQL_OBSERVACAO_ITEM = """
-                SELECT usu_obsite FROM sapiens.usu_t120sit
-                WHERE usu_codemp=:codemp 
-                AND usu_codfil=:codfil
-                AND usu_numsol=:numsol 
-                AND usu_seqite=:seqite
-"""
-
-def get_observacao_item(codemp, codfil, numsol, seqite):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(SQL_OBSERVACAO_ITEM, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite)
-    row = cur.fetchone()
-    conn.close()
-    return (row[0] or "").strip() if row and row[0] else ""
 
 def get_observacoes_solicitacao(codemp, codfil, numsol):
     """{seqite: observacao} de todos os itens da solicitação, pra destacar na
