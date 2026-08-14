@@ -143,7 +143,7 @@ def get_etapas():
     conn.close()
     return etapas
 
-def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None):
+def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None, numped=None, numsol=None):
     """
     Retorna as solicitações já separadas por etapa (solicitado / em
     separação / atendido), prontas para o painel.
@@ -165,6 +165,12 @@ def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None):
     if etapa:
         sql += " and e.usu_codetp = :etapa"
         binds["etapa"] = int(etapa)
+    if numped:
+        sql += " and s.usu_numped = :numped"
+        binds["numped"] = int(numped)
+    if numsol:
+        sql += " and s.usu_numsol = :numsol"
+        binds["numsol"] = int(numsol)
 
     sql += " ORDER BY s.usu_datsol"
 
@@ -246,7 +252,8 @@ SQL_ITENS_SOLICITACAO = """
                        i.usu_qtdmso,
                        i.usu_qtddev,
                        i.usu_sitite,
-                       i.usu_indamo
+                       i.usu_indamo,
+                       i.usu_obsite
                 FROM sapiens.usu_t120sit i
                 JOIN sapiens.e120ped p ON p.codemp=i.usu_codemp
                 AND p.codfil=i.usu_codfil
@@ -261,6 +268,7 @@ SQL_ITENS_SOLICITACAO = """
                 WHERE i.usu_codemp=:empsol
                 AND i.usu_codfil=:filsol
                 AND i.usu_numsol=:numsol
+                ORDER BY i.usu_sitite, i.usu_seqite
 """
 
 # Select de saldo de estoque - duas variações (empresas 1/2/12 e a 5)
@@ -395,6 +403,8 @@ def get_solicitacao_detalhe(codemp, codfil, numsol):
             "qtd_movimentada": _fmt_qtd(row["usu_qtdmov"]),
             "qtd_mso": _fmt_qtd(row["usu_qtdmso"]),
             "qtd_devolvida": _fmt_qtd(row["usu_qtddev"]),
+            "sitite": row["usu_sitite"],
+            "tem_observacao": bool((row["usu_obsite"] or "").strip()),
             "saldos": saldos,
         })
 
@@ -551,9 +561,9 @@ def get_item_solicitacao(codemp, codfil, numsol, seqite):
 def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, usuario, motivo=None):
     """Cancela o item na solicitação (T120SIT) - não mexe no pedido nem
     chama webservice. A usu_obsite recebe uma mensagem gerada com
-    data/hora/usuário/motivo - SUBSTITUI o texto anterior (não concatena,
-    diferente da Observação de item/solicitação). Dois caminhos, decididos
-    pela usu_qtdmov atual do item:
+    data/hora/usuário/motivo - CONCATENA com o texto anterior (não
+    sobrescreve, mesmo padrão da Observação de item). Dois caminhos,
+    decididos pela usu_qtdmov atual do item:
       - SEM movimentação (usu_qtdmov=0): cancela o item inteiro de uma vez
         (usu_sitite=3, usu_qtdcan=usu_qtdsol, zera usu_qtdate/usu_qtdabe).
       - COM movimentação (usu_qtdmov<>0): cancela só o que ainda está
@@ -562,9 +572,10 @@ def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, usuario, motivo=No
     Usada só pelo botão "Cancelar" - a Troca de item usa
     cancelar_qtd_item_solicitacao_troca (abaixo), que cancela só a
     quantidade trocada, podendo deixar o resto do item em aberto."""
-    agora = datetime.now()
-    motivo_txt = (motivo or "").strip() or "sem motivo informado"
-    msgcan = f"Cancelado em {agora:%d/%m/%Y %H:%M} por {usuario} - motivo: {motivo_txt}"
+    motivo_txt = (motivo or "").strip() or "sem motivo"
+    linha_nova = f"{usuario}: cancelado - {motivo_txt}"
+    anterior = get_observacao_item(codemp, codfil, numsol, seqite)
+    msgcan = f"{anterior}\n{linha_nova}" if anterior else linha_nova
 
     conn = get_connection()
     cur = conn.cursor()
@@ -681,12 +692,18 @@ def get_observacao_item(codemp, codfil, numsol, seqite):
     return (row[0] or "").strip() if row and row[0] else ""
 
 
-def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
+def salvar_observacao_item(codemp, codfil, numsol, seqite, texto_novo):
+    """Concatena `texto_novo` com o que já existir em usu_obsite - NUNCA
+    sobrescreve o texto anterior. `texto_novo` já deve vir formatado pelo
+    chamador (ex: com data/hora/usuário na frente)."""
+    anterior = get_observacao_item(codemp, codfil, numsol, seqite)
+    texto_final = f"{anterior}\n{texto_novo.strip()}" if anterior else texto_novo.strip()
+
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         SQL_SALVAR_OBSERVACAO_ITEM,
-        obs=observacao.strip(), codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+        obs=texto_final, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
     )
     conn.commit()
     conn.close()
@@ -825,6 +842,25 @@ def get_item_pedido(codemp, codfil, numped, seqipd):
         "qtd_cancelada": _fmt_qtd(qtdcan), "qtd_faturada": _fmt_qtd(qtdfat),
         "preco_unitario": float(preuni) if preuni is not None else None,
     }
+
+# ---------------------------------------------------------------------
+# Checa se o produto já está no pedido (botão "Inserir peça") - evita
+# incluir o mesmo produto duas vezes no mesmo pedido. Ignora linhas já
+# canceladas (sitipd=5, mesma regra usada no JOIN de SQL_PRODUTO_ATIVO_PRECO).
+# ---------------------------------------------------------------------
+SQL_PRODUTO_JA_NO_PEDIDO = """
+                SELECT COUNT(*) FROM sapiens.e120ipd
+                WHERE codemp=:codemp AND codfil=:codfil AND numped=:numped
+                AND codpro=:codpro AND sitipd <> 5
+"""
+
+def produto_ja_esta_no_pedido(codemp, codfil, numped, codpro):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_PRODUTO_JA_NO_PEDIDO, codemp=codemp, codfil=codfil, numped=numped, codpro=codpro)
+    count = cur.fetchone()[0]
+    conn.close()
+    return count > 0
 
 # ---------------------------------------------------------------------
 # Inserir item novo na solicitação (T120SIT) - usado por Inserir peça e

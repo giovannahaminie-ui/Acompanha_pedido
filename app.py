@@ -28,11 +28,8 @@ FILIAIS = [("L", "Londrina"), ("P", "Prudente"), ("C", "Cambé")] # A Filial de 
 # produto substituído) - abaixo disso não mostra o comparativo de preço,
 # só pede a confirmação simples; acima, mostra o alerta com os valores e
 # passa a exigir o campo "quem autorizou" (gravado no usu_obsite do item
-# novo). Regra: 10% do preço atual (substituído) pra maioria dos itens;
-# R$ 200,00 fixo pra "motor completo" (identificado pelo tipo de serviço)
+# novo). Regra única: 10% do preço atual (substituído), pra qualquer item.
 TOLERANCIA_PRECO_TROCA_PERCENTUAL = 0.10
-TOLERANCIA_PRECO_TROCA_MOTOR_COMPLETO = 200.0
-TIPO_SERVICO_MOTOR_COMPLETO = "Completo"
 
 # ---------------------------------------------------------------------
 # Autenticação / controle de sessão
@@ -89,6 +86,10 @@ def selecao():
             "empresa": request.form.get("empresa"),
             "filial": request.form.get("filial") or None,
         }
+        # Libera UMA carga do painel sem pedir login de novo - consumido em
+        # painel(); qualquer recarga depois disso (F5, filtro, voltar pro
+        # painel) exige login de novo.
+        session["painel_liberado"] = True
         return redirect(url_for("painel"))
     return render_template(
         "selecao.html",
@@ -101,15 +102,24 @@ def selecao():
 @app.route("/painel")
 @login_obrigatorio
 def painel():
+    # Exige login de novo toda vez que o painel recarrega (F5, filtro,
+    # voltar do detalhe pro painel, etc.) - só a carga que vem direto da
+    # seleção de empresa/filial passa sem pedir login de novo.
+    if not session.pop("painel_liberado", False):
+        session.pop("usuario", None)
+        return redirect(url_for("login"))
+
     filtro = session.get("filtro")
     if not filtro:
         return redirect(url_for("selecao"))
 
     tipo_servico = request.args.get("tipo_servico") or None
     etapa = request.args.get("etapa") or None
+    numped = request.args.get("numped") or None
+    numsol = request.args.get("numsol") or None
     dados = oracle_db.get_solicitacoes(
         empresa=filtro.get("empresa"), filial=filtro.get("filial"),
-        tipo_servico=tipo_servico, etapa=etapa,
+        tipo_servico=tipo_servico, etapa=etapa, numped=numped, numsol=numsol,
     )
 
     nome_empresa = dict(EMPRESAS).get(int(filtro["empresa"]), "")
@@ -130,6 +140,7 @@ def painel():
         tipos_servico=tipos_servico, etapas=etapas,
         tipo_servico_selecionado=tipo_servico, etapa_selecionada=etapa,
         tipo_servico_nome=tipo_servico_nome, etapa_nome=etapa_nome,
+        numped_selecionado=numped, numsol_selecionado=numsol,
         data_hoje=datetime.now().strftime("%d/%m/%Y"),
         hora_agora=datetime.now().strftime("%H:%M"),
     )
@@ -179,16 +190,19 @@ def detalhe_solicitacao(codemp, codfil, numsol):
 @login_obrigatorio
 def observacao_item(codemp, codfil, numsol, seqite):
     if request.method == "POST":
-        observacao = request.form.get("observacao", "")
-        try:
-            oracle_db.salvar_observacao_item(codemp, codfil, numsol, seqite, observacao)
-            return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
-        except Exception:
-            return render_template(
-                "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-                observacao=observacao,
-                erro="Falha ao salvar a observação - tente novamente.",
-            )
+        comentario_novo = request.form.get("observacao", "").strip()
+        if comentario_novo:
+            linha = f"{session['usuario']}: {comentario_novo}"
+            try:
+                oracle_db.salvar_observacao_item(codemp, codfil, numsol, seqite, linha)
+            except Exception:
+                observacao = oracle_db.get_observacao_item(codemp, codfil, numsol, seqite)
+                return render_template(
+                    "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+                    observacao=observacao,
+                    erro="Falha ao salvar a observação - tente novamente.",
+                )
+        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
     try:
         observacao = oracle_db.get_observacao_item(codemp, codfil, numsol, seqite)
     except Exception:
@@ -264,6 +278,8 @@ def inserir_item(codemp, codfil, numsol):
                     erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
                 elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, cabecalho["numped"], codpro_novo):
                     erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
+                elif oracle_db.produto_ja_esta_no_pedido(codemp, codfil, cabecalho["numped"], codpro_novo):
+                    erro = f"Produto {codpro_novo} já existe nesse pedido."
 
         if not erro and request.form.get("confirmar"):
             try:
@@ -300,9 +316,6 @@ def trocar_item(codemp, codfil, numsol, seqite):
     item_pedido = None
     if item["seqipd"]:
         item_pedido = oracle_db.get_item_pedido(codemp, codfil, item["numped"], item["seqipd"])
-
-    cabecalho = oracle_db.get_solicitacao_cabecalho(codemp, codfil, numsol)
-    motor_completo = cabecalho["tipo_servico"].strip().lower() == TIPO_SERVICO_MOTOR_COMPLETO.lower()
 
     erro = None
     produto = None
@@ -344,15 +357,11 @@ def trocar_item(codemp, codfil, numsol, seqite):
         mostrar_confirmacao = produto is not None and erro is None
 
         # Diferença de preço (produto novo x substituído) só é exibida quando
-        # passa da tolerância: 10% do preço atual (substituído), ou R$ 200,00
-        # fixo quando a solicitação é de "motor completo" (tipo de serviço).
-        # Dentro da tolerância a tela pula direto pra confirmação simples.
+        # passa da tolerância: 10% do preço atual (substituído). Dentro da
+        # tolerância a tela pula direto pra confirmação simples.
         if mostrar_confirmacao and item_pedido and item_pedido["preco_unitario"] is not None:
             diferenca_preco = produto["preco"] - item_pedido["preco_unitario"]
-            limite = (
-                TOLERANCIA_PRECO_TROCA_MOTOR_COMPLETO if motor_completo
-                else abs(item_pedido["preco_unitario"]) * TOLERANCIA_PRECO_TROCA_PERCENTUAL
-            )
+            limite = abs(item_pedido["preco_unitario"]) * TOLERANCIA_PRECO_TROCA_PERCENTUAL
             alerta_preco = abs(diferenca_preco) > limite
 
         if mostrar_confirmacao and request.form.get("confirmar") and alerta_preco and not autorizado_por:
@@ -389,15 +398,9 @@ def trocar_item(codemp, codfil, numsol, seqite):
                         produto["descricao"], qtd, session["usuario"], veio_de_troca=True,
                     )
                     if alerta_preco:
-                        # Mensagem compacta - usu_obsite tem limite de tamanho
-                        # (VARCHAR2(250)): data, hora, usuário, codpro do
-                        # produto antigo (substituído) e a mensagem, só isso.
-                        agora_msg = datetime.now()
-                        msg_troca = (
-                            f"{agora_msg:%d/%m/%Y %H:%M} {session['usuario']} "
-                            f"troca de {item['codpro']}: autorizado por {autorizado_por} "
-                            f"(dif. R$ {diferenca_preco:.2f})"
-                        )
+                        # Mensagem enxuta - usu_obsite tem limite de 99
+                        # caracteres (VARCHAR2(99)).
+                        msg_troca = f"{session['usuario']}: aut. {autorizado_por} (R$ {diferenca_preco:.2f})"
                         oracle_db.salvar_observacao_item(
                             codemp, codfil, numsol, seqite_novo, msg_troca,
                         )
@@ -455,4 +458,4 @@ def index():
     return redirect(url_for("painel") if "usuario" in session else url_for("login"))
 
 if __name__ == "__main__":
-    app.run(debug=True, host="192.168.10.69", port=5051)
+    app.run(debug=False, host="0.0.0.0", port=5051)

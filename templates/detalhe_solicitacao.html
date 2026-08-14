@@ -179,15 +179,15 @@
       </tr>
       <tr>
         <th class="th-qtd" style="text-align:center;">Solic.</th>
-        <th class="th-qtd" style="text-align:center;">Atend.</th>
-        <th class="th-qtd" style="text-align:center;">Aberta</th>
         <th class="th-qtd" style="text-align:center;">Can.</th>
+        <th class="th-qtd" style="text-align:center;">Aberta</th>
+        <th class="th-qtd" style="text-align:center;">Atend.</th>
         <th class="th-qtd" style="text-align:center;">Mov.</th>
       </tr>
     </thead>
     <tbody>
       {% for item in itens %}
-      <tr>
+      <tr class="{{ 'linha-sitite-ok' if item.sitite in (4, 6) else ('linha-sitite-cancelado' if item.sitite == 3 else '') }}">
         <td class="mono">{{ item.codpro1 }}</td>
         <td class="mono" style="color:var(--red-600); font-weight:700;">{{ item.codpro2 }}</td>
         <td style="white-space:normal;">{{ item.descricao }}</td>
@@ -195,9 +195,9 @@
         <td>{{ item.marca }}</td>
         <td class="mono">{{ item.endereco or '—' }}</td>
         <td style="text-align:center;">{{ item.qtd_solic }}</td>
-        <td style="text-align:center;">{{ item.qtd_atendida }}</td>
-        <td style="text-align:center;">{{ item.qtd_aberta }}</td>
         <td style="text-align:center;">{{ item.qtd_cancelada }}</td>
+        <td style="text-align:center;">{{ item.qtd_aberta }}</td>
+        <td style="text-align:center;">{{ item.qtd_atendida }}</td>
         <td style="text-align:center;">{{ item.qtd_movimentada }}</td>
         <td>
           <div class="saldo-lista">
@@ -220,7 +220,8 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           </a>
           <a href="{{ url_for('observacao_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
-             class="btn btn-icone" title="Observação do item">
+             class="btn btn-icone{{ ' tem-observacao' if item.tem_observacao else '' }}"
+             title="{{ 'Observação do item (já tem comentário)' if item.tem_observacao else 'Observação do item' }}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           </a>
           <a href="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"

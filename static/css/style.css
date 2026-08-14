@@ -214,12 +214,12 @@ input:disabled, textarea:disabled { color: var(--text-mute); background: var(--b
 /* --- botões de ação por item (segunda tela) --- */
 /* flex-wrap: os 5 ícones (cancelar/observação/equivalentes/inserir/trocar)
    quebram em 2 linhas em vez de forçar a coluna a esticar a tabela toda */
-.item-acoes { display: flex; flex-wrap: wrap; gap: 3px; align-content: flex-start; }
+.item-acoes { display: flex; flex-wrap: wrap; gap: 3px; align-content: flex-start; background: transparent; }
 .item-acoes .btn-icone {
   padding: 0.35rem 0.45rem; margin: 0; font-size: 0.78rem;
   border-radius: var(--radius-sm);
 }
-.item-acoes .btn-icone.tem-observacao { color: var(--red-600); border-color: var(--red-border); background: var(--red-soft); }
+.item-acoes .btn-icone.tem-observacao { color: var(--amber); border-color: var(--amber-border); background: var(--amber-soft); }
 .item-acoes .btn-icone:disabled { color: var(--text-faint); background: var(--bg-soft); cursor: not-allowed; }
 .item-acoes .btn-icone:disabled:hover { transform: none; box-shadow: none; }
 
@@ -238,6 +238,12 @@ label {
   text-transform: uppercase; color: var(--text-mute); margin-bottom: 0.4rem;
 }
 .field { margin-bottom: 1.1rem; }
+.observacao-historico {
+  max-height: 12rem; overflow-y: auto; white-space: pre-wrap;
+  font-size: 0.9rem; line-height: 1.5; color: var(--text-dim);
+  background: var(--bg-soft); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); padding: 0.7rem 0.85rem;
+}
 
 /* =================================================================
    HERO — telas de login / seleção / assumir solicitação
@@ -396,6 +402,7 @@ label {
 }
 .ux-select-compact .ux-select-trigger { padding: 0.55rem 0.85rem; font-size: 0.85rem; background-color: var(--white); }
 .ux-select-compact .ux-selected-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.input-compact { padding: 0.55rem 0.85rem; font-size: 0.85rem; }
 
 @media (max-width: 1024px) { .premium-dashboard { height: 98vh; } }
 .painel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; align-items: stretch; }
@@ -434,6 +441,14 @@ table th.th-qtd:first-of-type { border-left: none; }
 table td.mono, table td.num { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-dim); background: var(--bg-soft); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); white-space: nowrap; }
 table tbody tr { transition: all 0.2s ease; }
 table tbody tr:hover td { background-color: var(--bg-soft); }
+table tbody tr.linha-sitite-ok td,
+table tbody tr.linha-sitite-ok td.item-acoes { background-color: var(--emerald-soft); border-top-color: var(--emerald-soft); }
+table tbody tr.linha-sitite-ok:hover td,
+table tbody tr.linha-sitite-ok:hover td.item-acoes { background-color: var(--emerald-border); border-top-color: var(--emerald-border); }
+table tbody tr.linha-sitite-cancelado td,
+table tbody tr.linha-sitite-cancelado td.item-acoes { background-color: var(--red-soft); border-top-color: var(--red-soft); }
+table tbody tr.linha-sitite-cancelado:hover td,
+table tbody tr.linha-sitite-cancelado:hover td.item-acoes { background-color: var(--red-soft-2); border-top-color: var(--red-soft-2); }
 table.clickable tbody tr { cursor: pointer; }
 table.clickable tbody tr:hover td { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03); }
 

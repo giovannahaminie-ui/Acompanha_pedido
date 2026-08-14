@@ -18,10 +18,17 @@
         </div>
       {% endif %}
 
+      {% if observacao %}
+        <div class="field">
+          <label>Histórico (não editável)</label>
+          <div class="observacao-historico">{{ observacao }}</div>
+        </div>
+      {% endif %}
+
       <form method="POST">
         <div class="field">
-          <label for="observacao">Observação</label>
-          <textarea id="observacao" name="observacao" placeholder="Ex: peça avariada, aguardando substituição..." autofocus>{{ observacao or '' }}</textarea>
+          <label for="observacao">{{ 'Acrescentar comentário' if observacao else 'Observação' }}</label>
+          <textarea id="observacao" name="observacao" placeholder="Ex: peça avariada, aguardando substituição..." autofocus></textarea>
         </div>
         <div style="display:flex; gap:0.75rem;">
           <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">
