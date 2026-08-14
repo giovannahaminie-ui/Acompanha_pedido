@@ -8,7 +8,7 @@
       <div class="card-brand">RT</div>
       <p class="card-title">Inserir peça na solicitação</p>
       <p class="card-subtitle">
-        Solicitação {{ numsol }} — O.S. {{ item.numped }}
+        Solicitação {{ numsol }} — O.S. {{ cabecalho.numped }}
       </p>
 
       {% if erro %}
@@ -42,7 +42,7 @@
           <input type="hidden" name="qtd" value="{{ qtd }}">
           <input type="hidden" name="confirmar" value="1">
           <div style="display:flex; gap:0.75rem;">
-            <a href="{{ url_for('inserir_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}" class="btn" style="flex:1; justify-content:center;">
+            <a href="{{ url_for('inserir_item', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">
               Voltar
             </a>
             <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">

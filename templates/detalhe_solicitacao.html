@@ -91,18 +91,6 @@
     <div class="info-card-value clamp" style="font-weight:500;" data-obs-titulo="Observação da Conferência">{{ solicitacao.memorando or '—' }}</div>
   </div>
 
-  <div class="info-card">
-    <div class="info-card-head" style="justify-content:space-between;">
-      <span style="display:flex; align-items:center; gap:0.4rem;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-        Observação dos itens
-      </span>
-      <a href="{{ url_for('observacao_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn btn-icone" title="Editar observação (aplica em todos os itens)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
-      </a>
-    </div>
-    <div class="info-card-value clamp" style="font-weight:500;" data-obs-titulo="Observação dos itens">{{ observacao_itens or '—' }}</div>
-  </div>
 </div>
 
 <div class="obs-modal-overlay" id="obs-modal-overlay">
@@ -156,19 +144,25 @@
   });
 </script>
 
-<p class="section-title">Itens solicitados e saldo por depósito</p>
+<div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.75rem;">
+  <p class="section-title" style="margin:0;">Itens solicitados e saldo por depósito</p>
+  <a href="{{ url_for('inserir_item', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn btn-icone" title="Inserir peça nova na solicitação">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    Inserir peça
+  </a>
+</div>
 
 <div class="table-card">
   <table>
     <colgroup>
       <col style="width:6%">
       <col style="width:5%">
+      <col style="width:10%">
       <col style="width:9%">
-      <col style="width:8%">
       <col style="width:5%">
       <col style="width:5%">
-      <col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%">
-      <col style="width:11%">
+      <col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:7%">
+      <col style="width:12%">
       <col style="width:11%">
     </colgroup>
     <thead>
@@ -179,7 +173,7 @@
         <th rowspan="2">Descrição (solicitação)</th>
         <th rowspan="2">Marca</th>
         <th rowspan="2">Endereço</th>
-        <th colspan="7" class="th-qtd-group" style="text-align:center;">Qtd.</th>
+        <th colspan="5" class="th-qtd-group" style="text-align:center;">Qtd.</th>
         <th rowspan="2">Saldo por depósito</th>
         <th rowspan="2">Ações</th>
       </tr>
@@ -189,15 +183,13 @@
         <th class="th-qtd" style="text-align:center;">Aberta</th>
         <th class="th-qtd" style="text-align:center;">Can.</th>
         <th class="th-qtd" style="text-align:center;">Mov.</th>
-        <th class="th-qtd" style="text-align:center;">MSO</th>
-        <th class="th-qtd" style="text-align:center;">Dev.</th>
       </tr>
     </thead>
     <tbody>
       {% for item in itens %}
       <tr>
         <td class="mono">{{ item.codpro1 }}</td>
-        <td class="mono" style="color:var(--text-faint);">{{ item.codpro2 }}</td>
+        <td class="mono" style="color:var(--red-600); font-weight:700;">{{ item.codpro2 }}</td>
         <td style="white-space:normal;">{{ item.descricao }}</td>
         <td style="white-space:normal; color:var(--text-dim);">{{ item.descricao_item or '—' }}</td>
         <td>{{ item.marca }}</td>
@@ -207,8 +199,6 @@
         <td style="text-align:center;">{{ item.qtd_aberta }}</td>
         <td style="text-align:center;">{{ item.qtd_cancelada }}</td>
         <td style="text-align:center;">{{ item.qtd_movimentada }}</td>
-        <td style="text-align:center;">{{ item.qtd_mso }}</td>
-        <td style="text-align:center;">{{ item.qtd_devolvida }}</td>
         <td>
           <div class="saldo-lista">
             {% for dep in item.saldos %}
@@ -229,9 +219,9 @@
              class="btn btn-icone" title="Buscar equivalentes">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           </a>
-          <a href="{{ url_for('inserir_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
-             class="btn btn-icone" title="Inserir peça nova">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <a href="{{ url_for('observacao_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
+             class="btn btn-icone" title="Observação do item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           </a>
           <a href="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
              class="btn btn-icone" title="Trocar item">

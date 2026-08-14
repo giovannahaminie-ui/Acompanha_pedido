@@ -164,43 +164,37 @@ def assumir_solicitacao(codemp, codfil, numsol):
 @login_obrigatorio
 def detalhe_solicitacao(codemp, codfil, numsol):
     dados = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
-    try:
-        observacao_itens = oracle_db.get_observacao_solicitacao(codemp, codfil, numsol)
-    except Exception:
-        observacao_itens = None  
     return render_template(
         "detalhe_solicitacao.html",
         solicitacao=dados["solicitacao"],
         itens=dados["itens"],
-        observacao_itens=observacao_itens,
         codemp=codemp, codfil=codfil, numsol=numsol,
     )
 
 # ---------------------------------------------------------------------
-# Observação da solicitação (botão único no cabeçalho - grava direto na
-# T120SIT do Sapiens, usu_obsite, aplicado em TODOS os itens da
-# solicitação de uma vez; antes era um botão por item).
+# Observação do item (botão na coluna de Ações, por item - grava direto na
+# T120SIT do Sapiens, usu_obsite, só do item em questão).
 # ---------------------------------------------------------------------
-@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/observacao", methods=["GET", "POST"])
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/observacao", methods=["GET", "POST"])
 @login_obrigatorio
-def observacao_solicitacao(codemp, codfil, numsol):
+def observacao_item(codemp, codfil, numsol, seqite):
     if request.method == "POST":
         observacao = request.form.get("observacao", "")
         try:
-            oracle_db.salvar_observacao_solicitacao(codemp, codfil, numsol, observacao, session["usuario"])
+            oracle_db.salvar_observacao_item(codemp, codfil, numsol, seqite, observacao)
             return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
         except Exception:
             return render_template(
-                "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
+                "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
                 observacao=observacao,
                 erro="Falha ao salvar a observação - tente novamente.",
             )
     try:
-        observacao = oracle_db.get_observacao_solicitacao(codemp, codfil, numsol)
+        observacao = oracle_db.get_observacao_item(codemp, codfil, numsol, seqite)
     except Exception:
         observacao = ""
     return render_template(
-        "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
+        "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
         observacao=observacao,
     )
 
@@ -231,17 +225,16 @@ def cancelar_item(codemp, codfil, numsol, seqite):
 
 # ---------------------------------------------------------------------
 # Inserir peça nova na solicitação + no pedido (webservice GravarPedidos_15).
-# Fluxo em duas etapas na mesma rota: 1ª submissão valida produto/preço e
-# mostra a comparação pra confirmação manual; 2ª (com "confirmar" no form)
-# executa de fato - primeiro o pedido (webservice), só grava a solicitação
+# Ação do cabeçalho da segunda tela (não é mais por item) - fluxo em duas
+# etapas na mesma rota: 1ª submissão valida produto/preço e mostra a
+# comparação pra confirmação manual; 2ª (com "confirmar" no form) executa
+# de fato - primeiro o pedido (webservice), só grava a solicitação
 # (T120SIT) se o webservice confirmar sucesso.
 # ---------------------------------------------------------------------
-@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/inserir", methods=["GET", "POST"])
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/inserir", methods=["GET", "POST"])
 @login_obrigatorio
-def inserir_item(codemp, codfil, numsol, seqite):
-    item = oracle_db.get_item_solicitacao(codemp, codfil, numsol, seqite)
-    if not item:
-        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+def inserir_item(codemp, codfil, numsol):
+    cabecalho = oracle_db.get_solicitacao_cabecalho(codemp, codfil, numsol)
 
     erro = None
     produto = None
@@ -258,24 +251,28 @@ def inserir_item(codemp, codfil, numsol, seqite):
         if qtd <= 0:
             erro = "Informe uma quantidade válida."
         else:
-            produto = oracle_db.buscar_produto_preco(codemp, codfil, item["numped"], codpro_novo)
-            if not produto:
-                erro = f"Produto {codpro_novo} não foi encontrado."
-            elif not produto["ativo"]:
-                erro = f"Produto {codpro_novo} está inativo."
-            elif not produto["preco"]:
-                erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
-            elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], codpro_novo):
-                erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
+            try:
+                produto = oracle_db.buscar_produto_preco(codemp, codfil, cabecalho["numped"], codpro_novo)
+            except oracle_db.ProdutoAmbiguoError as e:
+                erro = str(e)
+            if not erro:
+                if not produto:
+                    erro = f"Produto {codpro_novo} não foi encontrado."
+                elif not produto["ativo"]:
+                    erro = f"Produto {codpro_novo} está inativo."
+                elif not produto["preco"]:
+                    erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
+                elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, cabecalho["numped"], codpro_novo):
+                    erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
 
         if not erro and request.form.get("confirmar"):
             try:
                 seqipd_novo = pedido_ws.incluir_item_pedido(
-                    codemp, codfil, item["numped"], codpro_novo, qtd,
+                    codemp, codfil, cabecalho["numped"], codpro_novo, qtd,
                     produto["preco"], produto["codtab"], session["usuario"],
                 )
                 oracle_db.inserir_item_solicitacao(
-                    codemp, codfil, numsol, item["numped"], seqipd_novo, codpro_novo,
+                    codemp, codfil, numsol, cabecalho["numped"], seqipd_novo, codpro_novo,
                     produto["descricao"], qtd, session["usuario"],
                 )
                 return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
@@ -283,8 +280,8 @@ def inserir_item(codemp, codfil, numsol, seqite):
                 erro = str(e)
 
     return render_template(
-        "inserir_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-        item=item, produto=produto, qtd=qtd, codpro_novo=codpro_novo, erro=erro,
+        "inserir_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
+        cabecalho=cabecalho, produto=produto, qtd=qtd, codpro_novo=codpro_novo, erro=erro,
     )
 
 # ---------------------------------------------------------------------
@@ -327,15 +324,19 @@ def trocar_item(codemp, codfil, numsol, seqite):
             maximo = item_pedido["qtd_aberta"] if item_pedido else 0
             erro = f"Quantidade inválida - máximo {maximo} (qtd. aberta no pedido)."
         else:
-            produto = oracle_db.buscar_produto_preco(codemp, codfil, item["numped"], codpro_novo)
-            if not produto:
-                erro = f"Produto {codpro_novo} não foi encontrado."
-            elif not produto["ativo"]:
-                erro = f"Produto {codpro_novo} está inativo."
-            elif not produto["preco"]:
-                erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
-            elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], codpro_novo):
-                erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
+            try:
+                produto = oracle_db.buscar_produto_preco(codemp, codfil, item["numped"], codpro_novo)
+            except oracle_db.ProdutoAmbiguoError as e:
+                erro = str(e)
+            if not erro:
+                if not produto:
+                    erro = f"Produto {codpro_novo} não foi encontrado."
+                elif not produto["ativo"]:
+                    erro = f"Produto {codpro_novo} está inativo."
+                elif not produto["preco"]:
+                    erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
+                elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], codpro_novo):
+                    erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
 
         # Produto passou por todas as checagens - mostra a etapa de
         # confirmação mesmo que a autorização de preço ainda falte (ver
@@ -368,19 +369,37 @@ def trocar_item(codemp, codfil, numsol, seqite):
 
             if not erro:
                 try:
+                    preco_substituido = item_pedido["preco_unitario"] if item_pedido else None
+                    # Se o preço do item substituído era maior que o do produto
+                    # novo, manda esse preço (do substituído) pro webservice;
+                    # senão manda sem preço (deixa o Sapiens aplicar o da
+                    # tabela dele), evitando cair na checagem de tolerância de
+                    # preço do próprio Sapiens.
+                    preco_incluir = (
+                        preco_substituido
+                        if preco_substituido is not None and preco_substituido > produto["preco"]
+                        else None
+                    ) 
                     seqipd_novo = pedido_ws.incluir_item_pedido(
                         codemp, codfil, item["numped"], codpro_novo, qtd,
-                        produto["preco"], produto["codtab"], session["usuario"],
+                        preco_incluir, produto["codtab"], session["usuario"],
                     )
                     seqite_novo = oracle_db.inserir_item_solicitacao(
                         codemp, codfil, numsol, item["numped"], seqipd_novo, codpro_novo,
                         produto["descricao"], qtd, session["usuario"], veio_de_troca=True,
                     )
                     if alerta_preco:
+                        # Mensagem compacta - usu_obsite tem limite de tamanho
+                        # (VARCHAR2(250)): data, hora, usuário, codpro do
+                        # produto antigo (substituído) e a mensagem, só isso.
+                        agora_msg = datetime.now()
+                        msg_troca = (
+                            f"{agora_msg:%d/%m/%Y %H:%M} {session['usuario']} "
+                            f"troca de {item['codpro']}: autorizado por {autorizado_por} "
+                            f"(dif. R$ {diferenca_preco:.2f})"
+                        )
                         oracle_db.salvar_observacao_item(
-                            codemp, codfil, numsol, seqite_novo,
-                            f"Troca autorizada por: {autorizado_por} "
-                            f"(diferença de preço R$ {diferenca_preco:.2f})",
+                            codemp, codfil, numsol, seqite_novo, msg_troca,
                         )
                     return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
                 except pedido_ws.PedidoWebserviceError as e:

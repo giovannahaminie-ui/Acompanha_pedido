@@ -422,7 +422,7 @@ label {
 table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
 .table-scroll table { table-layout: fixed; }
 table th {
-  position: sticky; top: 0; text-align: left; padding: 0.75rem 1rem;
+  position: sticky; top: 0; text-align: left; vertical-align: middle; padding: 0.75rem 1rem;
   font-weight: 700; font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--text-mute); background: var(--bg-soft);
   border-bottom: 1px solid var(--border); box-shadow: 0 1px 0 var(--border); z-index: 1;

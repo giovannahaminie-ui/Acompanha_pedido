@@ -13,6 +13,13 @@ ORACLE_DSN = os.environ.get("ORACLE_DSN", "")
 ORACLE_USER = os.environ.get("ORACLE_USER", "")
 ORACLE_PASSWORD = os.environ.get("ORACLE_PASSWORD", "")
 
+
+class ProdutoAmbiguoError(Exception):
+    """Erro quando buscar_produto_preco encontra mais de uma linha pro
+    mesmo código de produto - cadastro ambíguo, não dá pra saber qual usar
+    com segurança (Inserir peça / Trocar item)."""
+
+
 def get_connection():
     """
     Abre conexão Oracle em modo thick
@@ -602,6 +609,7 @@ SQL_CANCELAR_QTD_ITEM_TROCA = """
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
                 AND usu_numsol=:numsol AND usu_seqite=:seqite
                 AND usu_sitite <> 3
+                AND usu_qtdabe >= :qtd
 """
 
 SQL_CANCELAR_QTD_ITEM_TROCA_TOTAL_SE_COMPLETO = """
@@ -657,26 +665,6 @@ SQL_SALVAR_OBSERVACAO_ITEM = """
                 AND usu_seqite=:seqite
 """
 
-def get_observacoes_solicitacao(codemp, codfil, numsol):
-    """{seqite: observacao} de todos os itens da solicitação, pra destacar na
-    listagem quais já têm observação.
-    """
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-
-        "SELECT usu_seqite, usu_obsite " \
-        "FROM sapiens.usu_t120sit "
-        "WHERE usu_codemp=:codemp AND usu_codfil=:codfil " \
-        "AND usu_numsol=:numsol",
-
-        codemp=codemp, codfil=codfil, numsol=numsol,
-    )
-    rows = cur.fetchall()
-    conn.close()
-    return {seqite: obs.strip() for seqite, obs in rows if obs}
-
-
 def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
     conn = get_connection()
     cur = conn.cursor()
@@ -691,30 +679,21 @@ def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
 # ---------------------------------------------------------------------
 # Observação única da solicitação.
 # ---------------------------------------------------------------------
-SQL_SALVAR_OBSERVACAO_SOLICITACAO = """
-                UPDATE sapiens.usu_t120sit
-                    SET usu_obsite = :obs
+SQL_OBSERVACAO_ITEM = """
+                SELECT usu_obsite FROM sapiens.usu_t120sit
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol
+                AND usu_numsol=:numsol AND usu_seqite=:seqite
 """
 
-def get_observacao_solicitacao(codemp, codfil, numsol):
-    """Observação atual da solicitação, pra pré-preencher a caixa do
-    cabeçalho - pega a primeira não-vazia entre os itens (todos devem ter
-    o mesmo texto, já que salvar_observacao_solicitacao aplica em todos)."""
-    observacoes = get_observacoes_solicitacao(codemp, codfil, numsol)
-    return next(iter(observacoes.values()), "")
-
-def salvar_observacao_solicitacao(codemp, codfil, numsol, observacao):
+def get_observacao_item(codemp, codfil, numsol, seqite):
+    """Observação atual de UM item (usada na tela de observação por item,
+    botão na coluna de Ações)."""
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(
-        SQL_SALVAR_OBSERVACAO_SOLICITACAO,
-        obs=observacao.strip(), codemp=codemp, codfil=codfil, numsol=numsol,
-    )
-    conn.commit()
+    cur.execute(SQL_OBSERVACAO_ITEM, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite)
+    row = cur.fetchone()
     conn.close()
-    return True
+    return (row[0] or "").strip() if row and row[0] else ""
 
 
 # ---------------------------------------------------------------------
@@ -735,6 +714,7 @@ SQL_PRODUTO_ATIVO_PRECO = """
                     AND t.codtpr='001' 
                     AND t.qtdmax=999999999 
                     AND t.datini = CASE WHEN p.codemp=1 THEN TO_DATE('01/04/2011','DD/MM/YYYY') WHEN p.codemp=12 THEN TO_DATE('01/01/2023','DD/MM/YYYY') WHEN p.codemp=5 THEN TO_DATE('01/04/2014','DD/MM/YYYY') END
+                    AND t.codpro = p.codpro
                 LEFT JOIN sapiens.e210est e ON e.codemp=p.codemp 
                     AND e.codpro=p.codpro AND e.coddep = CASE WHEN p.codemp=1 
                     AND :filsol in (10,1001) THEN '3' ELSE '1' end
@@ -742,6 +722,7 @@ SQL_PRODUTO_ATIVO_PRECO = """
                     AND a.codfil=:filsol 
                     AND a.codpro=p.codpro 
                     AND a.sitipd <> 5
+                    AND a.numped = :numped
                 WHERE p.sitpro='A' 
                     AND t.sitreg='A' 
                     AND p.codemp=:empsol 
@@ -760,12 +741,16 @@ def buscar_produto_preco(codemp, codfil, numped, codpro):
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute(SQL_PRODUTO_ATIVO_PRECO, empsol=codemp, filsol=codfil, pronew=codpro)
-    prod_row = cur.fetchone()
+    cur.execute(SQL_PRODUTO_ATIVO_PRECO, empsol=codemp, filsol=codfil, pronew=codpro, numped=numped)
+    rows = cur.fetchall()
     conn.close()
-    if not prod_row:
+    if not rows:
         return None
-    _codpro_enc, prebas, _coddep, _qtdabe, _qtdped, codmar, despro, _seqipd = prod_row
+    if len(rows) > 1:
+        raise ProdutoAmbiguoError(
+            f"Encontrado mais de um cadastro pro produto {codpro} - verifique o cadastro no Sapiens antes de continuar."
+        )
+    _codpro_enc, prebas, _coddep, _qtdabe, _qtdped, codmar, despro, _seqipd = rows[0]
 
     preco = float(prebas) if prebas is not None else None
     return {

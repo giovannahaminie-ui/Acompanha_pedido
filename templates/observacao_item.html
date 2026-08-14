@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Observação da solicitação{% endblock %}
+{% block title %}Observação do item{% endblock %}
 {% block content %}
 <div class="hero-screen">
   <div class="hero-inner" style="grid-template-columns: 1fr;">
 
     <div class="auth-card" style="max-width:520px;">
       <div class="card-brand">RT</div>
-      <p class="card-title">Observação da solicitação</p>
+      <p class="card-title">Observação do item</p>
       <p class="card-subtitle">
-        Solicitação {{ numsol }} — aplicada a todos os itens
+        Solicitação {{ numsol }}
       </p>
 
       {% if erro %}
