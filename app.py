@@ -455,4 +455,4 @@ def index():
     return redirect(url_for("painel") if "usuario" in session else url_for("login"))
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5051)
+    app.run(debug=True, host="192.168.10.69", port=5051)

@@ -625,8 +625,15 @@ SQL_CANCELAR_QTD_ITEM_TROCA_PARCIAL_SE_SOBROU = """
 def cancelar_qtd_item_solicitacao_troca(codemp, codfil, numsol, seqite, qtd):
     """Cancela só `qtd` unidades do item substituído (usado pela Troca) -
     pode deixar o resto do item em aberto se a troca for parcial. Não mexe
-    no pedido nem chama webservice, não mexe em usu_obsite. Trava
-    usu_qtdabe >= :qtd impede cancelar mais do que está aberto."""
+    no pedido nem chama webservice, não mexe em usu_obsite.
+
+    IMPORTANTE: o webservice do Sapiens (GravarPedidos_15)
+    atualizava usu_qtdcan sozinho, por conta própria, duplicando com o que
+    a função também fazia (usu_qtdcan ficava com o dobro da quantidade
+    trocada). Isso foi corrigido do lado do Sapiens -
+    agora usu_qtdcan volta a ser 100% responsabilidade desta função, o
+    Sapiens não mexe mais nele. Trava usu_qtdabe >= :qtd impede descontar
+    mais do que está aberto."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
