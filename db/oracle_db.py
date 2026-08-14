@@ -596,7 +596,7 @@ def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, usuario, motivo=No
 SQL_CANCELAR_QTD_ITEM_TROCA = """
                 UPDATE sapiens.usu_t120sit
                     SET usu_qtdcan = usu_qtdcan + :qtd,
-                        usu_qtdabe = 10,
+                        usu_qtdabe = usu_qtdabe - :qtd,
                         usu_sitite = 2
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
                 AND usu_numsol=:numsol AND usu_seqite=:seqite
