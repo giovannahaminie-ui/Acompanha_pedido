@@ -12,13 +12,19 @@ load_dotenv()  # lê o arquivo .env na raiz do projeto (contendo ORACLE_DSN, ORA
 ORACLE_DSN = os.environ.get("ORACLE_DSN", "")
 ORACLE_USER = os.environ.get("ORACLE_USER", "")
 ORACLE_PASSWORD = os.environ.get("ORACLE_PASSWORD", "")
+ORACLE_CLIENT_LIB_DIR = os.environ.get("ORACLE_CLIENT_LIB_DIR") or None
+
+_oracle_client_iniciado = False
 
 def get_connection():
     """
     Abre conexão Oracle em modo thick
     """
+    global _oracle_client_iniciado
     import oracledb
-    oracledb.init_oracle_client()  # thick mode
+    if not _oracle_client_iniciado:
+        oracledb.init_oracle_client(lib_dir=ORACLE_CLIENT_LIB_DIR)
+        _oracle_client_iniciado = True
     return oracledb.connect(
         user=ORACLE_USER, password=ORACLE_PASSWORD, dsn=ORACLE_DSN
     )
