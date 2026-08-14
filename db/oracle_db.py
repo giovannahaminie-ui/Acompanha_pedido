@@ -625,7 +625,8 @@ SQL_CANCELAR_QTD_ITEM_TROCA_PARCIAL_SE_SOBROU = """
 def cancelar_qtd_item_solicitacao_troca(codemp, codfil, numsol, seqite, qtd):
     """Cancela só `qtd` unidades do item substituído (usado pela Troca) -
     pode deixar o resto do item em aberto se a troca for parcial. Não mexe
-    no pedido nem chama webservice, não mexe em usu_obsite."""
+    no pedido nem chama webservice, não mexe em usu_obsite. Trava
+    usu_qtdabe >= :qtd impede cancelar mais do que está aberto."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
@@ -656,25 +657,21 @@ SQL_SALVAR_OBSERVACAO_ITEM = """
                 AND usu_seqite=:seqite
 """
 
-def get_observacoes_solicitacao(codemp, codfil, numsol):
-    """{seqite: observacao} de todos os itens da solicitação, pra destacar na
-    listagem quais já têm observação.
-    """
+SQL_OBSERVACAO_ITEM = """
+                SELECT usu_obsite FROM sapiens.usu_t120sit
+                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
+                AND usu_numsol=:numsol AND usu_seqite=:seqite
+"""
+
+def get_observacao_item(codemp, codfil, numsol, seqite):
+    """Observação atual de UM item (usada na tela de observação por item,
+    botão na coluna de Ações)."""
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(
-
-        "SELECT usu_seqite, usu_obsite " \
-        "FROM sapiens.usu_t120sit "
-        "WHERE usu_codemp=:codemp " \
-        "AND usu_codfil=:codfil " \
-        "AND usu_numsol=:numsol",
-
-        codemp=codemp, codfil=codfil, numsol=numsol,
-    )
-    rows = cur.fetchall()
+    cur.execute(SQL_OBSERVACAO_ITEM, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite)
+    row = cur.fetchone()
     conn.close()
-    return {seqite: obs.strip() for seqite, obs in rows if obs}
+    return (row[0] or "").strip() if row and row[0] else ""
 
 
 def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
@@ -683,34 +680,6 @@ def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
     cur.execute(
         SQL_SALVAR_OBSERVACAO_ITEM,
         obs=observacao.strip(), codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-    )
-    conn.commit()
-    conn.close()
-    return True
-
-# ---------------------------------------------------------------------
-# Observação única da solicitação.
-# ---------------------------------------------------------------------
-SQL_SALVAR_OBSERVACAO_SOLICITACAO = """
-                UPDATE sapiens.usu_t120sit
-                    SET usu_obsite = :obs
-                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol
-"""
-
-def get_observacao_solicitacao(codemp, codfil, numsol):
-    """Observação atual da solicitação, pra pré-preencher a caixa do
-    cabeçalho - pega a primeira não-vazia entre os itens (todos devem ter
-    o mesmo texto, já que salvar_observacao_solicitacao aplica em todos)."""
-    observacoes = get_observacoes_solicitacao(codemp, codfil, numsol)
-    return next(iter(observacoes.values()), "")
-
-def salvar_observacao_solicitacao(codemp, codfil, numsol, observacao):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        SQL_SALVAR_OBSERVACAO_SOLICITACAO,
-        obs=observacao.strip(), codemp=codemp, codfil=codfil, numsol=numsol,
     )
     conn.commit()
     conn.close()
