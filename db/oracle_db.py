@@ -595,13 +595,13 @@ def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, usuario, motivo=No
 # ---------------------------------------------------------------------
 SQL_CANCELAR_QTD_ITEM_TROCA = """
                 UPDATE sapiens.usu_t120sit
-                    SET usu_qtdcan = usu_qtdcan + :qtd1,
-                        usu_qtdabe = usu_qtdabe - :qtd2,
+                    SET usu_qtdcan = usu_qtdcan + :qtd,
+                        usu_qtdabe = 10,
                         usu_sitite = 2
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
                 AND usu_numsol=:numsol AND usu_seqite=:seqite
                 AND usu_sitite <> 3
-                AND usu_qtdabe >= :qtd3
+                AND usu_qtdabe >= :qtd
 """
 
 SQL_CANCELAR_QTD_ITEM_TROCA_TOTAL_SE_COMPLETO = """
@@ -630,7 +630,7 @@ def cancelar_qtd_item_solicitacao_troca(codemp, codfil, numsol, seqite, qtd):
     cur = conn.cursor()
     cur.execute(
         SQL_CANCELAR_QTD_ITEM_TROCA,
-        qtd1=qtd, qtd2=qtd, qtd3=qtd, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+        qtd=qtd, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
     )
     cur.execute(
         SQL_CANCELAR_QTD_ITEM_TROCA_TOTAL_SE_COMPLETO,
