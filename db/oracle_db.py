@@ -13,13 +13,6 @@ ORACLE_DSN = os.environ.get("ORACLE_DSN", "")
 ORACLE_USER = os.environ.get("ORACLE_USER", "")
 ORACLE_PASSWORD = os.environ.get("ORACLE_PASSWORD", "")
 
-
-class ProdutoAmbiguoError(Exception):
-    """Erro quando buscar_produto_preco encontra mais de uma linha pro
-    mesmo código de produto - cadastro ambíguo, não dá pra saber qual usar
-    com segurança (Inserir peça / Trocar item)."""
-
-
 def get_connection():
     """
     Abre conexão Oracle em modo thick
@@ -43,7 +36,6 @@ SQL_LOGIN = """
                 AND situsu = 'A'
                 GROUP BY codusu
 """
-
 
 def verificar_login(usuario: str):
     """
@@ -528,6 +520,7 @@ SQL_CANCELAR_ITEM_SOLICITACAO_TOTAL = """
 
 # Com movimentação (usu_qtdmov <> 0): cancela só o que ainda está aberto,
 # preserva usu_qtdate (não apaga o que já foi atendido/movimentado).
+
 SQL_CANCELAR_ITEM_SOLICITACAO_QTD_ABERTA = """
                 UPDATE sapiens.usu_t120sit
                     SET usu_qtdcan = usu_qtdcan + usu_qtdabe,
@@ -585,7 +578,6 @@ def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, usuario, motivo=No
     conn.close()
     return True
 
-
 # ---------------------------------------------------------------------
 # Cancelamento PARCIAL do item substituído numa Troca - diferente do botão
 # Cancelar (que sempre cancela o item inteiro): aqui só a quantidade que
@@ -603,13 +595,13 @@ def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, usuario, motivo=No
 # ---------------------------------------------------------------------
 SQL_CANCELAR_QTD_ITEM_TROCA = """
                 UPDATE sapiens.usu_t120sit
-                    SET usu_qtdcan = usu_qtdcan + :qtd,
-                        usu_qtdabe = usu_qtdabe - :qtd,
+                    SET usu_qtdcan = usu_qtdcan + :qtd1,
+                        usu_qtdabe = usu_qtdabe - :qtd2,
                         usu_sitite = 2
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
                 AND usu_numsol=:numsol AND usu_seqite=:seqite
                 AND usu_sitite <> 3
-                AND usu_qtdabe >= :qtd
+                AND usu_qtdabe >= :qtd3
 """
 
 SQL_CANCELAR_QTD_ITEM_TROCA_TOTAL_SE_COMPLETO = """
@@ -630,7 +622,6 @@ SQL_CANCELAR_QTD_ITEM_TROCA_PARCIAL_SE_SOBROU = """
                 AND usu_sitite <> 3
 """
 
-
 def cancelar_qtd_item_solicitacao_troca(codemp, codfil, numsol, seqite, qtd):
     """Cancela só `qtd` unidades do item substituído (usado pela Troca) -
     pode deixar o resto do item em aberto se a troca for parcial. Não mexe
@@ -639,7 +630,7 @@ def cancelar_qtd_item_solicitacao_troca(codemp, codfil, numsol, seqite, qtd):
     cur = conn.cursor()
     cur.execute(
         SQL_CANCELAR_QTD_ITEM_TROCA,
-        qtd=qtd, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+        qtd1=qtd, qtd2=qtd, qtd3=qtd, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
     )
     cur.execute(
         SQL_CANCELAR_QTD_ITEM_TROCA_TOTAL_SE_COMPLETO,
@@ -665,6 +656,27 @@ SQL_SALVAR_OBSERVACAO_ITEM = """
                 AND usu_seqite=:seqite
 """
 
+def get_observacoes_solicitacao(codemp, codfil, numsol):
+    """{seqite: observacao} de todos os itens da solicitação, pra destacar na
+    listagem quais já têm observação.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+
+        "SELECT usu_seqite, usu_obsite " \
+        "FROM sapiens.usu_t120sit "
+        "WHERE usu_codemp=:codemp " \
+        "AND usu_codfil=:codfil " \
+        "AND usu_numsol=:numsol",
+
+        codemp=codemp, codfil=codfil, numsol=numsol,
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return {seqite: obs.strip() for seqite, obs in rows if obs}
+
+
 def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
     conn = get_connection()
     cur = conn.cursor()
@@ -679,22 +691,30 @@ def salvar_observacao_item(codemp, codfil, numsol, seqite, observacao):
 # ---------------------------------------------------------------------
 # Observação única da solicitação.
 # ---------------------------------------------------------------------
-SQL_OBSERVACAO_ITEM = """
-                SELECT usu_obsite FROM sapiens.usu_t120sit
+SQL_SALVAR_OBSERVACAO_SOLICITACAO = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_obsite = :obs
                 WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                AND usu_numsol=:numsol
 """
 
-def get_observacao_item(codemp, codfil, numsol, seqite):
-    """Observação atual de UM item (usada na tela de observação por item,
-    botão na coluna de Ações)."""
+def get_observacao_solicitacao(codemp, codfil, numsol):
+    """Observação atual da solicitação, pra pré-preencher a caixa do
+    cabeçalho - pega a primeira não-vazia entre os itens (todos devem ter
+    o mesmo texto, já que salvar_observacao_solicitacao aplica em todos)."""
+    observacoes = get_observacoes_solicitacao(codemp, codfil, numsol)
+    return next(iter(observacoes.values()), "")
+
+def salvar_observacao_solicitacao(codemp, codfil, numsol, observacao):
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(SQL_OBSERVACAO_ITEM, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite)
-    row = cur.fetchone()
+    cur.execute(
+        SQL_SALVAR_OBSERVACAO_SOLICITACAO,
+        obs=observacao.strip(), codemp=codemp, codfil=codfil, numsol=numsol,
+    )
+    conn.commit()
     conn.close()
-    return (row[0] or "").strip() if row and row[0] else ""
-
+    return True
 
 # ---------------------------------------------------------------------
 # Validação de produto novo + preço (botões "Trocar" e "Inserir peça").
@@ -742,15 +762,11 @@ def buscar_produto_preco(codemp, codfil, numped, codpro):
     cur = conn.cursor()
 
     cur.execute(SQL_PRODUTO_ATIVO_PRECO, empsol=codemp, filsol=codfil, pronew=codpro, numped=numped)
-    rows = cur.fetchall()
+    prod_row = cur.fetchone()
     conn.close()
-    if not rows:
+    if not prod_row:
         return None
-    if len(rows) > 1:
-        raise ProdutoAmbiguoError(
-            f"Encontrado mais de um cadastro pro produto {codpro} - verifique o cadastro no Sapiens antes de continuar."
-        )
-    _codpro_enc, prebas, _coddep, _qtdabe, _qtdped, codmar, despro, _seqipd = rows[0]
+    _codpro_enc, prebas, _coddep, _qtdabe, _qtdped, codmar, despro, _seqipd = prod_row
 
     preco = float(prebas) if prebas is not None else None
     return {
@@ -806,7 +822,6 @@ def produto_tem_ligacao_deposito(codemp, codfil, numped, codpro):
     coddep = coddep_row[0] if coddep_row else None
     return bool(coddep) and str(coddep).strip() not in ("", "0")
 
-
 # ---------------------------------------------------------------------
 # Situação do item no pedido (E120IPD) - qtd aberta/cancelada/faturada,
 # usado na tela de troca pra checar antes de trocar.
@@ -834,7 +849,6 @@ def get_item_pedido(codemp, codfil, numped, seqipd):
         "qtd_cancelada": _fmt_qtd(qtdcan), "qtd_faturada": _fmt_qtd(qtdfat),
         "preco_unitario": float(preuni) if preuni is not None else None,
     }
-
 
 # ---------------------------------------------------------------------
 # Inserir item novo na solicitação (T120SIT) - usado por Inserir peça e
