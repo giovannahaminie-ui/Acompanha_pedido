@@ -142,6 +142,7 @@
       valueEl.insertAdjacentElement('afterend', botao);
     });
   });
+  
 </script>
 
 <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.75rem;">
@@ -155,24 +156,24 @@
 <div class="table-card">
   <table>
     <colgroup>
+      <col style="width:8%">
       <col style="width:6%">
-      <col style="width:5%">
+      <col style="width:14%">
       <col style="width:10%">
-      <col style="width:9%">
-      <col style="width:5%">
-      <col style="width:5%">
-      <col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:7%">
-      <col style="width:12%">
-      <col style="width:11%">
+      <col style="width:6%">
+      <col style="width:7%">
+      <col style="width:4%"><col style="width:4%"><col style="width:4%"><col style="width:4%"><col style="width:4%">
+      <col style="width:14%">
+      <col style="width:10%">
     </colgroup>
     <thead>
       <tr>
+        <th rowspan="2">Cód. Fab.</th>
         <th rowspan="2">Produto</th>
-        <th rowspan="2">Produto 2</th>
         <th rowspan="2">Descrição (produto)</th>
         <th rowspan="2">Descrição (solicitação)</th>
         <th rowspan="2">Marca</th>
-        <th rowspan="2">Endereço</th>
+        <th rowspan="3">Endereço</th>
         <th colspan="5" class="th-qtd-group" style="text-align:center;">Qtd.</th>
         <th rowspan="2">Saldo por depósito</th>
         <th rowspan="2">Ações</th>
@@ -188,18 +189,21 @@
     <tbody>
       {% for item in itens %}
       <tr class="{{ 'linha-sitite-ok' if item.sitite in (4, 6) else ('linha-sitite-cancelado' if item.sitite == 3 else '') }}">
-        <td class="mono">{{ item.codpro1 }}</td>
-        <td class="mono" style="color:var(--red-600); font-weight:700;">{{ item.codpro2 }}</td>
+        <td class="mono codpro-fab">{{ item.codpro2 }}</td>
+        <td class="mono codpro-padrao">{{ item.codpro1 }}</td>
         <td style="white-space:normal;">{{ item.descricao }}</td>
         <td style="white-space:normal; color:var(--text-dim);">{{ item.descricao_item or '—' }}</td>
         <td>{{ item.marca }}</td>
-        <td class="mono">{{ item.endereco or '—' }}</td>
+        <td class="mono" style="white-space:nowrap;">{{ item.endereco or '—' }}</td>
         <td style="text-align:center;">{{ item.qtd_solic }}</td>
         <td style="text-align:center;">{{ item.qtd_cancelada }}</td>
         <td style="text-align:center;">{{ item.qtd_aberta }}</td>
         <td style="text-align:center;">{{ item.qtd_atendida }}</td>
         <td style="text-align:center;">{{ item.qtd_movimentada }}</td>
         <td>
+          {% if item.sitite in (3, 4, 6) %}
+          <span class="badge badge-zero">—</span>
+          {% else %}
           <div class="saldo-lista">
             {% for dep in item.saldos %}
               <span class="badge badge-ok">
@@ -209,8 +213,14 @@
               <span class="badge badge-zero">sem saldo</span>
             {% endfor %}
           </div>
+          {% endif %}
         </td>
-        <td class="item-acoes">
+        <td class="item-observacao{{ ' item-observacao-consulta' if item.observacao else '' }}">
+          {% if item.sitite in (3, 4, 6) %}
+          {% if item.observacao %}
+          <span class="acoes-consulta-obs">{{ item.observacao }}</span>
+          {% endif %}
+          {% else %}
           <a href="{{ url_for('cancelar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
              class="btn btn-icone" title="Cancelar item na solicitação">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
@@ -228,6 +238,7 @@
              class="btn btn-icone" title="Trocar item">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
           </a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

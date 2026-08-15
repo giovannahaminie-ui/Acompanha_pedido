@@ -86,10 +86,6 @@ def selecao():
             "empresa": request.form.get("empresa"),
             "filial": request.form.get("filial") or None,
         }
-        # Libera UMA carga do painel sem pedir login de novo - consumido em
-        # painel(); qualquer recarga depois disso (F5, filtro, voltar pro
-        # painel) exige login de novo.
-        session["painel_liberado"] = True
         return redirect(url_for("painel"))
     return render_template(
         "selecao.html",
@@ -102,13 +98,6 @@ def selecao():
 @app.route("/painel")
 @login_obrigatorio
 def painel():
-    # Exige login de novo toda vez que o painel recarrega (F5, filtro,
-    # voltar do detalhe pro painel, etc.) - só a carga que vem direto da
-    # seleção de empresa/filial passa sem pedir login de novo.
-    if not session.pop("painel_liberado", False):
-        session.pop("usuario", None)
-        return redirect(url_for("login"))
-
     filtro = session.get("filtro")
     if not filtro:
         return redirect(url_for("selecao"))

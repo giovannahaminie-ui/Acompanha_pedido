@@ -529,6 +529,16 @@ table.clickable tbody tr:hover td { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03); 
 .table-card table th, .table-card table td { padding: 0.5rem 0.55rem; font-size: 0.8rem; }
 .table-card table td.mono { font-size: 0.74rem; padding: 2px 4px; white-space: normal; word-break: break-all; }
 
+/* Cód. Fab. em destaque (vem antes do Produto) - Produto (código padrão de
+   8 dígitos) fica menor, só de referência. */
+.table-card table td.mono.codpro-fab { font-size: 0.92rem; font-weight: 800; color: var(--red-600); background: var(--red-soft); border-color: var(--red-border); }
+.table-card table td.mono.codpro-padrao { font-size: 0.66rem; color: var(--text-mute); font-weight: 500; }
+
+/* Item já cancelado/atendido - sem ações, só consulta */
+.item-acoes.item-acoes-consulta { flex-direction: column; align-items: flex-start; }
+.acoes-consulta { font-size: 0.74rem; font-weight: 600; color: var(--text-faint); font-style: italic; }
+.acoes-consulta-obs { font-size: 0.76rem; font-weight: 500; color: var(--text-dim); font-style: normal; white-space: pre-wrap; line-height: 1.35; }
+
 /* --- lista de itens equivalentes --- */
 .equiv-row {
   display: flex; align-items: center; justify-content: space-between; gap: 1.25rem;

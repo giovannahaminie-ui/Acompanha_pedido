@@ -395,7 +395,14 @@ def get_solicitacao_detalhe(codemp, codfil, numsol):
     for row in itens_raw:
         codpro1 = row["usu_codpro"]
         codpro2 = row["usu_codpro2"]
-        saldos = _saldos_por_deposito(cur, codemp, codpro1, codpro2)
+        sitite = row["usu_sitite"]
+        # Item já cancelado (3) ou atendido (4, 6) - não busca saldo de
+        # estoque, fica só de consulta na tela (botões de ação escondidos
+        # no template).
+        if sitite in (3, 4, 6):
+            saldos = []
+        else:
+            saldos = _saldos_por_deposito(cur, codemp, codpro1, codpro2)
 
         itens.append({
             "seqite": row["usu_seqite"], "numped": row["usu_numped"], "seqipd": row["usu_seqipd"],
@@ -411,6 +418,7 @@ def get_solicitacao_detalhe(codemp, codfil, numsol):
             "qtd_devolvida": _fmt_qtd(row["usu_qtddev"]),
             "sitite": row["usu_sitite"],
             "tem_observacao": bool((row["usu_obsite"] or "").strip()),
+            "observacao": (row["usu_obsite"] or "").strip(),
             "saldos": saldos,
         })
 
