@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Solicitação de compra{% endblock %}
+{% block content %}
+<div class="hero-screen">
+  <div class="hero-inner" style="grid-template-columns: 1fr;">
+    <div class="auth-card" style="max-width:720px;">
+      <div class="card-brand">RT</div>
+      <p class="card-title">Solicitação de compra</p>
+      <p class="card-subtitle">
+        Solicitação {{ numsol }} — {{ itens|length }} item(ns) selecionado(s)
+      </p>
+
+      {% if resultados %}
+        {% for r in resultados %}
+        <div class="alert{{ ' alert-sucesso' if r.sucesso else '' }}">
+          <strong>{{ r.item.codpro2 }} — {{ r.item.descricao }}</strong><br>
+          {{ r.mensagem }}
+          {% if r.sucesso and r.numsol_compra %}
+          <div style="display:flex; align-items:center; justify-content:center; gap:0.5rem; margin-top:0.6rem;">
+            <input type="text" value="{{ r.numsol_compra }}" readonly
+                   style="width:auto; max-width:8rem; text-align:center; font-family:var(--font-mono); font-weight:700; padding:0.4rem 0.6rem;">
+            <button type="button" class="btn btn-icone btn-copiar-numsol" data-copiar="{{ r.numsol_compra }}" title="Copiar número da solicitação de compra">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              Copiar
+            </button>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+        <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn-primary" style="display:flex; justify-content:center; margin-top:0.75rem;">
+          Voltar pra solicitação
+        </a>
+        <script>
+          document.querySelectorAll('.btn-copiar-numsol').forEach(function (botao) {
+            botao.addEventListener('click', function () {
+              const texto = botao.dataset.copiar;
+              const original = botao.innerHTML;
+              function marcarCopiado() {
+                botao.textContent = 'Copiado!';
+                setTimeout(function () { botao.innerHTML = original; }, 1500);
+              }
+              if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(texto).then(marcarCopiado);
+              } else {
+                const campo = document.createElement('textarea');
+                campo.value = texto;
+                campo.style.position = 'fixed';
+                campo.style.opacity = '0';
+                document.body.appendChild(campo);
+                campo.focus();
+                campo.select();
+                document.execCommand('copy');
+                document.body.removeChild(campo);
+                marcarCopiado();
+              }
+            });
+          });
+        </script>
+      {% else %}
+        <form method="POST" action="{{ url_for('solicitacao_compra_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}">
+          {% for item in itens %}
+          <input type="hidden" name="seqites" value="{{ item.seqite }}">
+          <div class="field" style="display:flex; align-items:center; gap:0.75rem;">
+            <label style="flex:1; margin:0;">
+              {{ item.codpro2 }} — {{ item.descricao }}
+              {% if item.alerta_saldo_grupo %}
+              <span style="display:block; color:var(--st-separacao); font-weight:600; font-size:0.78rem;">
+                O produto possui saldo no grupo!
+              </span>
+              {% endif %}
+            </label>
+            <input type="number" name="qtd_{{ item.seqite }}" step="any" min="0.01" value="{{ item.qtd_sugerida }}" style="width:6rem;" required>
+          </div>
+          {% endfor %}
+          <input type="hidden" name="confirmar" value="1">
+          <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+            <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">Cancelar</a>
+            <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">Confirmar solicitação</button>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

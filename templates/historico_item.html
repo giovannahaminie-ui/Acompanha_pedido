@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Histórico do item{% endblock %}
+{% block content %}
+{% set situacoes = {1: 'Aberto', 2: 'Aberto (parcial)', 3: 'Cancelado', 4: 'Atendido', 6: 'Atendido'} %}
+<div class="hero-screen">
+  <div class="hero-inner" style="grid-template-columns: 1fr;">
+    <div class="auth-card" style="max-width:760px;">
+      <div class="card-brand">RT</div>
+      <p class="card-title">Histórico do item</p>
+      <p class="card-subtitle">
+        {{ item.codpro2 }} / {{ item.codpro1 }} — {{ item.descricao }}
+      </p>
+
+      <div class="info-cards" style="margin-top:1rem;">
+        <div class="info-card">
+          <div class="info-card-head">Situação atual</div>
+          <div class="info-card-value">{{ situacoes.get(item.sitite, 'Desconhecida') }}</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-head">Solicitado por</div>
+          <div class="info-card-value">{{ item.solicitante_item or '—' }}</div>
+          <div class="info-card-sub">{{ item.data_hora_item or '—' }}</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-head">Vínculo</div>
+          <div class="info-card-value">Pedido {{ item.numped or '—' }}</div>
+          <div class="info-card-sub">
+            {{ 'Solicitação de compra ' + item.numsco|string if item.numsco else 'Sem solicitação de compra vinculada' }}
+          </div>
+        </div>
+      </div>
+
+      <p class="section-title" style="margin-top:1.5rem;">Quantidades</p>
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:center;">Solic</th>
+              <th style="text-align:center;">Cancelada</th>
+              <th style="text-align:center;">Aberta</th>
+              <th style="text-align:center;">Atendida</th>
+              <th style="text-align:center;">Movimentada</th>
+              <th style="text-align:center;">Já pedida (MSO)</th>
+              <th style="text-align:center;">Devolvida</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align:center;">{{ item.qtd_solic }}</td>
+              <td style="text-align:center;">{{ item.qtd_cancelada }}</td>
+              <td style="text-align:center;">{{ item.qtd_aberta }}</td>
+              <td style="text-align:center;">{{ item.qtd_atendida }}</td>
+              <td style="text-align:center;">{{ item.qtd_movimentada }}</td>
+              <td style="text-align:center;">{{ item.qtd_mso }}</td>
+              <td style="text-align:center;">{{ item.qtd_devolvida }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="section-title" style="margin-top:1.5rem;">Log de ações (observação do item)</p>
+      {% if log_observacoes %}
+        <div style="display:flex; flex-direction:column; gap:0.5rem;">
+          {% for linha in log_observacoes %}
+          <div class="alert" style="background:var(--bg-soft); border-color:var(--border); color:var(--navy-900);">
+            {{ linha }}
+          </div>
+          {% endfor %}
+        </div>
+        <p class="note">
+          Cancelamentos, trocas e comentários registrados nesse item, na ordem em que foram gravados.
+        </p>
+      {% else %}
+        <p class="note">Nenhuma ação registrada ainda pra esse item.</p>
+      {% endif %}
+
+      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="display:flex; justify-content:center; margin-top:1.25rem;">
+        Voltar pra solicitação
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -141,33 +141,121 @@
       botao.addEventListener('click', function () { abrirModal(titulo, texto); });
       valueEl.insertAdjacentElement('afterend', botao);
     });
+
+    // Balão de observação por item (tabela de itens) - reaproveita o mesmo
+    // modal dos cards acima, sem precisar de outra tela.
+    document.querySelectorAll('.btn-obs-preview').forEach(function (botao) {
+      botao.addEventListener('click', function () {
+        abrirModal(botao.dataset.obsTitulo || 'Observação', botao.dataset.obsTexto || '');
+      });
+    });
+
+    // Botão de copiar o Cód. Fab. (útil pra colar direto no campo de
+    // código de barras/produto da tela de Conferência com reserva).
+    document.querySelectorAll('.btn-copiar-codfab').forEach(function (botao) {
+      botao.addEventListener('click', function () {
+        const texto = botao.dataset.copiar;
+        const iconeOriginal = botao.innerHTML;
+        function marcarCopiado() {
+          botao.textContent = '✓';
+          setTimeout(function () { botao.innerHTML = iconeOriginal; }, 1200);
+        }
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(texto).then(marcarCopiado);
+        } else {
+          const campo = document.createElement('textarea');
+          campo.value = texto;
+          campo.style.position = 'fixed';
+          campo.style.opacity = '0';
+          document.body.appendChild(campo);
+          campo.focus();
+          campo.select();
+          document.execCommand('copy');
+          document.body.removeChild(campo);
+          marcarCopiado();
+        }
+      });
+    });
+
+    // Checkboxes de "Pedido loja" / "Solicitação compra" (tabela de itens) -
+    // seleção múltipla e independente por linha; o contador e o botão (fora
+    // da tabela) refletem quantos itens estão marcados em cada coluna.
+    function configurarSelecaoLote(formId, contadorId, botaoId) {
+      const contador = document.getElementById(contadorId);
+      const botao = document.getElementById(botaoId);
+      if (!contador || !botao) return;
+
+      function atualizar() {
+        const marcados = document.querySelectorAll('input[type="checkbox"][form="' + formId + '"]:checked').length;
+        contador.textContent = marcados === 0
+          ? 'Nenhum item selecionado'
+          : marcados + (marcados === 1 ? ' item selecionado' : ' itens selecionados');
+        botao.disabled = marcados === 0;
+      }
+
+      document.querySelectorAll('input[type="checkbox"][form="' + formId + '"]').forEach(function (cb) {
+        cb.addEventListener('change', atualizar);
+      });
+      atualizar();
+    }
+
+    configurarSelecaoLote('form-pedido-loja', 'contador-pedido-loja', 'btn-pedido-loja');
+    configurarSelecaoLote('form-solicitacao-compra', 'contador-solicitacao-compra', 'btn-solicitacao-compra');
   });
-  
+
 </script>
 
-<div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.75rem;">
+<form id="form-pedido-loja" method="POST" action="{{ url_for('pedido_loja_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}"></form>
+<form id="form-solicitacao-compra" method="POST" action="{{ url_for('solicitacao_compra_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}"></form>
+
+<div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.75rem; flex-wrap:wrap;">
   <p class="section-title" style="margin:1;">Itens solicitados e saldo por depósito:</p>
-  <a href="{{ url_for('inserir_item', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn btn-icone" title="Inserir peça nova na solicitação">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-    Inserir peça
-  </a>
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+    <span style="display:flex; align-items:center; gap:0.4rem;">
+      <button type="submit" form="form-pedido-loja" id="btn-pedido-loja" class="btn btn-icone" title="Pedir na loja os itens marcados na coluna &quot;Pedido loja&quot;" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+        Pedir na loja
+      </button>
+      <span id="contador-pedido-loja" class="contador-selecao">Nenhum item selecionado</span>
+    </span>
+    <span style="display:flex; align-items:center; gap:0.4rem;">
+      <button type="submit" form="form-solicitacao-compra" id="btn-solicitacao-compra" class="btn btn-icone" title="Solicitar compra dos itens marcados na coluna &quot;Solic. compra&quot;" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+        Solicitar compra
+      </button>
+      <span id="contador-solicitacao-compra" class="contador-selecao">Nenhum item selecionado</span>
+    </span>
+    <a href="{{ url_for('inserir_item', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn btn-icone" title="Inserir peça nova na solicitação">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      Inserir peça
+    </a>
+    <a href="{{ url_for('conferencia_reserva', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn btn-icone" title="Conferência com reserva">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+     Conferência
+    </a>
+  </div>
 </div>
 
+
 <div class="table-card">
-  <table>
+  <table class="tabela-itens">
     <colgroup>
+      <col style="width:5%">
+      <col style="width:5%">
       <col style="width:7%">
       <col style="width:6%">
-      <col style="width:14%">
-      <col style="width:10%">
+      <col style="width:12%">
+      <col style="width:8%">
       <col style="width:6%">
       <col style="width:6%">
       <col style="width:5%"><col style="width:4%"><col style="width:6%"><col style="width:5%"><col style="width:5%">
-      <col style="width:14%">
-      <col style="width:10%">
+      <col style="width:11%">
+      <col style="width:9%">
     </colgroup>
     <thead>
       <tr>
+        <th rowspan="2" title="Marcar pra pedir na loja (botão &quot;Pedir na loja&quot; acima da tabela)">Pedido loja</th>
+        <th rowspan="2" title="Marcar pra solicitar compra (botão &quot;Solicitar compra&quot; acima da tabela)">Solic. compra</th>
         <th rowspan="2">Cód. Fab.</th>
         <th rowspan="2">Produto</th>
         <th rowspan="2">Descrição (produto)</th>
@@ -189,10 +277,29 @@
     <tbody>
       {% for item in itens %}
       <tr class="{{ 'linha-sitite-ok' if item.sitite in (4, 6) else ('linha-sitite-cancelado' if item.sitite == 3 else '') }}">
-        <td class="mono codpro-fab">{{ item.codpro2 }}</td>
+        <td style="text-align:center;">
+          {% if item.sitite not in (3, 4, 6) %}
+          <input type="checkbox" form="form-pedido-loja" name="seqites" value="{{ item.seqite }}">
+          {% endif %}
+        </td>
+        <td style="text-align:center;">
+          {% if item.sitite not in (3, 4, 6) %}
+          <input type="checkbox" form="form-solicitacao-compra" name="seqites" value="{{ item.seqite }}">
+          {% endif %}
+        </td>
+        <td class="mono codpro-fab">
+          <span style="display:inline-flex; align-items:center; gap:4px;">
+            {{ item.codpro2 }}
+            {% if item.codpro2 %}
+            <button type="button" class="btn-copiar-codfab" data-copiar="{{ item.codpro2 }}" title="Copiar código">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </button>
+            {% endif %}
+          </span>
+        </td>
         <td class="mono codpro-padrao">{{ item.codpro1 }}</td>
         <td style="white-space:normal;">{{ item.descricao }}</td>
-        <td style="white-space:center; color:var(--text-dim);">{{ item.descricao_item or '—' }}</td>
+        <td style="color:var(--text-dim);">{{ item.descricao_item or '—' }}</td>
         <td>{{ item.marca }}</td>
         <td class="mono" style="white-space:nowrap;">{{ item.endereco or '—' }}</td>
         <td style="text-align:center;">{{ item.qtd_solic }}</td>
@@ -217,27 +324,36 @@
         </td>
         <td class="item-observacao{{ ' item-observacao-consulta' if item.observacao else '' }}">
           {% if item.sitite in (3, 4, 6) %}
-          {% if item.observacao %}
-          <span class="acoes-consulta-obs" style="white-space:normal; color:var(--text-dim);">{{ item.observacao }}</span>
+          {% if item.tem_observacao %}
+          <button type="button" class="btn-obs-preview" title="{{ item.observacao|truncate(90) }}"
+                  data-obs-titulo="Observação do item {{ item.codpro2 }}" data-obs-texto="{{ item.observacao }}">💬</button>
+          {% else %}
+          <span class="text-mute">—</span>
           {% endif %}
           {% else %}
-          <a href="{{ url_for('cancelar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
-             class="btn btn-icone" title="Cancelar item na solicitação">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-          </a>
-          <a href="{{ url_for('equivalentes_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite, codpro=item.codpro1) }}"
-             class="btn btn-icone" title="Buscar equivalentes">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          </a>
-          <a href="{{ url_for('observacao_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
-             class="btn btn-icone{{ ' tem-observacao' if item.tem_observacao else '' }}"
-             title="{{ 'Observação do item (já tem comentário)' if item.tem_observacao else 'Observação do item' }}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-          </a>
-          <a href="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
-             class="btn btn-icone" title="Trocar item">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-          </a>
+          <div class="acoes-grid">
+            {% if item.tem_observacao %}
+            <button type="button" class="btn-obs-preview" title="{{ item.observacao|truncate(90) }}"
+                    data-obs-titulo="Observação do item {{ item.codpro2 }}" data-obs-texto="{{ item.observacao }}">💬</button>
+            {% endif %}
+            <a href="{{ url_for('cancelar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
+               class="btn btn-icone" title="Cancelar item na solicitação">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+            </a>
+            <a href="{{ url_for('equivalentes_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite, codpro=item.codpro1) }}"
+               class="btn btn-icone" title="Buscar equivalentes">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </a>
+            <a href="{{ url_for('observacao_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
+               class="btn btn-icone{{ ' tem-observacao' if item.tem_observacao else '' }}"
+               title="{{ 'Observação do item (já tem comentário)' if item.tem_observacao else 'Observação do item' }}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </a>
+            <a href="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
+               class="btn btn-icone" title="Trocar item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+            </a>
+          </div>
           {% endif %}
         </td>
       </tr>

@@ -126,12 +126,20 @@ def _salvar_xml_arquivos(history, operacao):
         caminho = _XML_DIR / f"{agora}_{operacao}_{sufixo}.xml"
         caminho.write_text(xml, encoding="utf-8")
 
-def _chamar_gravar_pedidos(pedidos, operacao):
+def _chamar_gravar_pedidos(pedidos, operacao, ignorar_pedido_bloqueado=False):
+    """`ignorar_pedido_bloqueado` pula a consideração de análise de crédito
+    do cliente (atraso de títulos) - só faz sentido pro codcli fixo de
+    transferência interna do Pedido na loja (não pro cliente real de
+    Inserir peça/Trocar item, onde o bloqueio de crédito é uma checagem de
+    negócio válida)."""
     client, history = _get_client()
     try:
         resposta = client.service.GravarPedidos_15(
             user=PEDIDO_WS_USER, password=PEDIDO_WS_PASSWORD, encryption=0,
-            parameters={"pedido": pedidos},
+            parameters={
+                "pedido": pedidos,
+                "ignorarPedidoBloqueado": "S" if ignorar_pedido_bloqueado else "N",
+            },
         )
     finally:
         _log_envelopes(history, operacao)
@@ -165,6 +173,13 @@ def _seqipd_da_resposta(resposta, codpro):
             return grid_pro.seqIpd
     raise PedidoWebserviceError("GravarPedidos não retornou a linha do produto gravado.")
 
+def _numped_da_resposta(resposta):
+    """numPed do pedido processado - só faz sentido quando o pedido é novo
+    (opeExe="I" no nível do pedido), pra mostrar o número gerado na tela."""
+    for resp_pedido in resposta.respostaPedido or []:
+        return getattr(resp_pedido, "numPed", None)
+    return None
+
 def cancelar_item_pedido(codemp, codfil, numped, seqipd, qtd_cancelar, usuario):
     """Cancela `qtd_cancelar` unidades de um item já existente no pedido
     (E120IPD, via seqIpd), registrando o usuário em USUALT (campo genérico,
@@ -194,3 +209,84 @@ def incluir_item_pedido(codemp, codfil, numped, codpro, qtd, preco, codtab, usua
     }
     resposta = _chamar_gravar_pedidos([pedido], "incluir_item_pedido")
     return _seqipd_da_resposta(resposta, codpro)
+
+# ---------------------------------------------------------------------
+# Pedido na loja (RTL) - mesmo webservice GravarPedidos_15 já usado por
+# incluir_item_pedido, mas com resEst/tnsPro e apontando pra loja. O pedido
+# é sempre NOVO (opeExe="I" no nível do pedido, não "A") - o número é
+# gerado pelo Sapiens na hora, não existe um pedido aberto de antemão pra
+# reaproveitar. Por isso não recebe numped, e sim codCli (pra abrir o
+# pedido do zero).
+# ---------------------------------------------------------------------
+def incluir_item_pedido_loja(codemp_loja, codfil_loja, codcli, codpro, qtd, preco, tns_pro, usuario):
+    """Retorna (seqipd, numped) - numped é o número do pedido novo que o
+    Sapiens gerou, pra mostrar na tela pra pessoa copiar."""
+    pedido = {
+        "opeExe": "I", "codEmp": codemp_loja, "codFil": codfil_loja, "codCli": codcli,
+        "produto": [{
+            "opeExe": "I",
+            "codPro": codpro, "qtdPed": _fmt_numero(qtd), "preUni": _fmt_numero(preco),
+            "tnsPro": tns_pro, "resEst": "S",
+            "usuGer": str(usuario),
+        }],
+    }
+    resposta = _chamar_gravar_pedidos([pedido], "incluir_item_pedido_loja", ignorar_pedido_bloqueado=True)
+    seqipd = _seqipd_da_resposta(resposta, codpro)
+    numped = _numped_da_resposta(resposta)
+    return seqipd, numped
+
+
+# ---------------------------------------------------------------------
+# Solicitação de compra - webservice (GerarSolicitacaoCompra_3)
+# ---------------------------------------------------------------------
+COMPRA_WS_WSDL = os.environ.get("COMPRA_WS_WSDL", "")
+COMPRA_WS_USER = os.environ.get("COMPRA_WS_USER", "")
+COMPRA_WS_PASSWORD = os.environ.get("COMPRA_WS_PASSWORD", "")
+
+def _get_client_compra():
+    if not (COMPRA_WS_WSDL and COMPRA_WS_USER and COMPRA_WS_PASSWORD):
+        raise PedidoWebserviceError(
+            "Webservice de solicitação de compra não configurado - faltam "
+            "COMPRA_WS_WSDL/COMPRA_WS_USER/COMPRA_WS_PASSWORD no .env."
+        )
+    import zeep
+    from zeep.plugins import HistoryPlugin
+
+    history = HistoryPlugin()
+    client = zeep.Client(COMPRA_WS_WSDL, plugins=[history])
+    return client, history
+
+def gerar_solicitacao_compra(codemp, numsol, cod_dep, codpro, cod_tns, dat_prv, fil_ped, num_ped, obs_sol, pre_sol, qtd_sol, usu_sol):
+    client, history = _get_client_compra()
+    try:
+        resposta = client.service.GerarSolicitacaoCompra_3(
+            user=COMPRA_WS_USER, password=COMPRA_WS_PASSWORD, encryption=0,
+            parameters={
+                "codEmp": codemp,
+                "itensProduto": [{
+                    "codDep": cod_dep,
+                    "codPro": codpro,
+                    "codTns": cod_tns,
+                    "datPrv": dat_prv.strftime("%d/%m/%Y"),
+                    "filPed": fil_ped,
+                    "numPed": num_ped,
+                    "obsSol": obs_sol,
+                    "preSol": f"{float(pre_sol):.2f}" if pre_sol is not None else None,
+                    "qtdSol": f"{float(qtd_sol):.2f}",
+                    "seqIpd": 1,
+                    "seqSol": 1,
+                    "uniMed": "UN",
+                    "usuSol": usu_sol,
+                }],
+                "numSol": numsol,
+            },
+        )
+    finally:
+        _log_envelopes(history, "gerar_solicitacao_compra")
+
+    erro_execucao = getattr(resposta, "erroExecucao", None)
+    if (erro_execucao or "").strip().upper() == "S":
+        raise PedidoWebserviceError(
+            getattr(resposta, "mensagemRetorno", None) or "Erro não especificado no GerarSolicitacaoCompra."
+        )
+    return numsol

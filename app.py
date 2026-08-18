@@ -290,6 +290,51 @@ def inserir_item(codemp, codfil, numsol):
     )
 
 # ---------------------------------------------------------------------
+# Conferência com reserva - código de barras/produto + qtd (qtdcon).
+# Tela pensada pra ficar aberta durante a conferência: cada envio resolve
+# um produto, valida e grava; a pessoa continua conferindo o próximo item
+# na mesma tela (não fecha depois de um envio com sucesso).
+# ---------------------------------------------------------------------
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia", methods=["GET", "POST"])
+@login_obrigatorio
+def conferencia_reserva(codemp, codfil, numsol):
+    erro = None
+    sucesso = None
+
+    if request.method == "POST":
+        codbar = request.form.get("codbar", "").strip()
+        try:
+            qtdcon = float(request.form.get("qtdcon", "0").replace(",", "."))
+        except ValueError:
+            qtdcon = 0
+
+        if not codbar:
+            erro = "Informe o código de barras ou do produto."
+        elif qtdcon <= 0:
+            erro = "Informe uma quantidade válida."
+        else:
+            codpro = oracle_db.resolver_codpro_conferencia(codemp, codbar)
+            if not codpro:
+                erro = f"Código {codbar} não encontrado (nem como derivação, nem código de barras, nem produto)."
+            else:
+                item = oracle_db.get_item_para_conferencia(codemp, codfil, numsol, codpro)
+                if not item:
+                    erro = f"Produto {codpro} não tem item em aberto nessa solicitação."
+                elif qtdcon > item["qtd_aberta"]:
+                    erro = f"Quantidade conferida ({qtdcon}) é maior que a quantidade aberta ({item['qtd_aberta']})."
+                else:
+                    filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
+                    coddep = oracle_db.get_coddep_esperado(codemp, filexe)
+                    item["codpro"] = codpro
+                    oracle_db.conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, qtdcon)
+                    sucesso = f"Produto {codpro} - {qtdcon} conferido(s) e reservado(s) com sucesso."
+
+    return render_template(
+        "conferencia_reserva.html", codemp=codemp, codfil=codfil, numsol=numsol,
+        erro=erro, sucesso=sucesso,
+    )
+
+# ---------------------------------------------------------------------
 # Troca de peça: cancela o item substituído no pedido + na solicitação e
 # inclui o item novo no pedido + na solicitação (usu_indtrc='S'). Mesma
 # lógica de confirmação manual em duas etapas do Inserir peça, mas com a
@@ -405,6 +450,176 @@ def trocar_item(codemp, codfil, numsol, seqite):
         item=item, item_pedido=item_pedido, produto=produto, qtd=qtd, codpro_novo=codpro_novo, erro=erro,
         diferenca_preco=diferenca_preco, alerta_preco=alerta_preco, autorizado_por=autorizado_por,
         mostrar_confirmacao=mostrar_confirmacao,
+    )
+
+def _dados_e_sugestao_loja(codemp, codfil, item):
+    """dados_pedido_loja + sugestão de quantidade (qtdest da loja + o que
+    ainda falta pedir, descontando usu_qtdmso) pra UM item - reaproveitado
+    tanto na tela de revisão do lote quanto na gravação de cada item."""
+    filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
+    dados_loja = oracle_db.dados_pedido_loja(codemp, filexe)
+    if not dados_loja:
+        return None, 0
+    qtdest_loja = oracle_db.get_qtd_deposito(dados_loja["codemp_loja"], dados_loja["coddep_loja"], item["codpro2"])
+    saldo_solicitacao = item["qtd_aberta"] - item["qtd_mso"]
+    qtd_sugerida = qtdest_loja + saldo_solicitacao if item["qtd_aberta"] > qtdest_loja else item["qtd_aberta"]
+    return dados_loja, qtd_sugerida
+
+
+# ---------------------------------------------------------------------
+# Pedido na loja (RTL) em lote - a pessoa marca os itens direto na tabela
+# (checkbox) e um botão independente (fora da coluna Ações) abre esta tela
+# de revisão, com quantidade editável por item; só grava (GravarPedidos_15,
+# um pedido por item) quando confirma aqui.
+# ---------------------------------------------------------------------
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/pedido_loja", methods=["POST"])
+@login_obrigatorio
+def pedido_loja_lote(codemp, codfil, numsol):
+    seqites = [int(s) for s in request.form.getlist("seqites")]
+    if not seqites:
+        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    itens_marcados = [i for i in detalhe["itens"] if i["seqite"] in seqites]
+
+    if request.form.get("confirmar"):
+        resultados = []
+        for item in itens_marcados:
+            if not item["saldos"]:
+                resultados.append({
+                    "item": item, "sucesso": False,
+                    "mensagem": "Sem saldo em nenhum depósito - não é possível pedir na loja.",
+                })
+                continue
+
+            try:
+                qtd = float(request.form.get(f"qtd_{item['seqite']}", "0").replace(",", "."))
+            except ValueError:
+                qtd = 0
+            if qtd <= 0:
+                resultados.append({"item": item, "sucesso": False, "mensagem": "Quantidade inválida."})
+                continue
+
+            dados_loja, _ = _dados_e_sugestao_loja(codemp, codfil, item)
+            if not dados_loja:
+                resultados.append({"item": item, "sucesso": False, "mensagem": "Sem regra de pedido de loja pra essa empresa/filial."})
+                continue
+
+            produto = oracle_db.buscar_produto_preco(dados_loja["codemp_loja"], dados_loja["codfil_loja"], None, item["codpro2"])
+            if not produto:
+                resultados.append({"item": item, "sucesso": False, "mensagem": f"Produto {item['codpro2']} não encontrado na loja."})
+                continue
+
+            try:
+                _seqipd, numped = pedido_ws.incluir_item_pedido_loja(
+                    dados_loja["codemp_loja"], dados_loja["codfil_loja"], dados_loja["codcli"],
+                    item["codpro2"], qtd, produto["preco"], tns_pro="90100",
+                    usuario=session["usuario"],
+                )
+                oracle_db.somar_qtd_mso_item(codemp, codfil, numsol, item["seqite"], qtd)
+                resultados.append({
+                    "item": item, "sucesso": True, "numped": numped,
+                    "mensagem": f"Pedido gerado com sucesso." if numped else "Pedido gerado com sucesso.",
+                })
+            except pedido_ws.PedidoWebserviceError as e:
+                resultados.append({"item": item, "sucesso": False, "mensagem": str(e)})
+
+        return render_template(
+            "pedido_loja_lote.html", codemp=codemp, codfil=codfil, numsol=numsol,
+            itens=itens_marcados, resultados=resultados,
+        )
+
+    itens_com_sugestao = []
+    for item in itens_marcados:
+        _, qtd_sugerida = _dados_e_sugestao_loja(codemp, codfil, item)
+        itens_com_sugestao.append({**item, "qtd_sugerida": qtd_sugerida, "sem_saldo": not item["saldos"]})
+
+    return render_template(
+        "pedido_loja_lote.html", codemp=codemp, codfil=codfil, numsol=numsol,
+        itens=itens_com_sugestao, resultados=None,
+    )
+
+
+# ---------------------------------------------------------------------
+# Solicitação de compra em lote - mesmo padrão do pedido na loja acima.
+# A gravação de verdade (GerarSolicitacaoCompra_3) continua travada: falta
+# confirmar numPed/filPed/codTns do item de compra (ver conversa anterior).
+# ---------------------------------------------------------------------
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/solicitacao_compra", methods=["POST"])
+@login_obrigatorio
+def solicitacao_compra_lote(codemp, codfil, numsol):
+    seqites = [int(s) for s in request.form.getlist("seqites")]
+    if not seqites:
+        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    itens_marcados = [i for i in detalhe["itens"] if i["seqite"] in seqites]
+
+    if request.form.get("confirmar"):
+        resultados = []
+        for item in itens_marcados:
+            try:
+                qtd = float(request.form.get(f"qtd_{item['seqite']}", "0").replace(",", "."))
+            except ValueError:
+                qtd = 0
+            if qtd <= 0:
+                resultados.append({"item": item, "sucesso": False, "mensagem": "Quantidade inválida."})
+                continue
+
+            filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
+            cod_dep = oracle_db.get_coddep_esperado(codemp, filexe)
+            if not cod_dep:
+                resultados.append({"item": item, "sucesso": False, "mensagem": "Sem depósito ligado a essa empresa/filial."})
+                continue
+
+            numsol_compra = oracle_db.proximo_numsol_compra(codemp)
+            try:
+                pedido_ws.gerar_solicitacao_compra(
+                    codemp=codemp, numsol=numsol_compra, cod_dep=cod_dep, codpro=item["codpro1"],
+                    cod_tns="91400", dat_prv=datetime.now(), fil_ped=codfil, num_ped=numsol_compra,
+                    obs_sol=f"Solicitação {numsol} item {item['seqite']}", pre_sol=None, qtd_sol=qtd,
+                    usu_sol=session["usuario"],
+                )
+                oracle_db.salvar_numsco_item(codemp, codfil, numsol, item["seqite"], numsol_compra)
+                oracle_db.somar_qtd_mso_item(codemp, codfil, numsol, item["seqite"], qtd)
+                resultados.append({
+                    "item": item, "sucesso": True, "numsol_compra": numsol_compra,
+                    "mensagem": f"Solicitação de compra {numsol_compra} gerada com sucesso.",
+                })
+            except pedido_ws.PedidoWebserviceError as e:
+                resultados.append({"item": item, "sucesso": False, "mensagem": str(e)})
+
+        return render_template(
+            "solicitacao_compra_lote.html", codemp=codemp, codfil=codfil, numsol=numsol,
+            itens=itens_marcados, resultados=resultados,
+        )
+
+    itens_com_sugestao = [
+        {**item, "qtd_sugerida": item["qtd_aberta"] - item["qtd_mso"], "alerta_saldo_grupo": bool(item["saldos"])}
+        for item in itens_marcados
+    ]
+    return render_template(
+        "solicitacao_compra_lote.html", codemp=codemp, codfil=codfil, numsol=numsol,
+        itens=itens_com_sugestao, resultados=None,
+    )
+
+# ---------------------------------------------------------------------
+# Histórico do item - consulta, sem gravação. Reaproveita
+# get_solicitacao_detalhe (mesmo dado já usado na tela principal), só que
+# focado num item só: quantidades, vínculo com pedido/solicitação de
+# compra, e o log de observações (cancelamento/troca/comentários).
+# ---------------------------------------------------------------------
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/historico")
+@login_obrigatorio
+def historico_item(codemp, codfil, numsol, seqite):
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    item = next((i for i in detalhe["itens"] if i["seqite"] == seqite), None)
+    if not item:
+        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+    log_observacoes = [linha.strip() for linha in item["observacao"].split("\n") if linha.strip()]
+    return render_template(
+        "historico_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+        item=item, log_observacoes=log_observacoes,
     )
 
 # ---------------------------------------------------------------------

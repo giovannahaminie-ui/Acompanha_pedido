@@ -211,6 +211,25 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--red-500); box-shadow: 0 0 0 4px var(--red-soft); }
 input:disabled, textarea:disabled { color: var(--text-mute); background: var(--bg-soft); }
 
+/* Checkbox - a regra genérica acima (appearance:none + width:100%) é feita
+   pra campo de texto/número e deixava o checkbox uma pílula em branco, sem
+   marcação visível nenhuma. Aqui ele volta a ter tamanho fixo e ganha um
+   "certinho" (::after) desenhado quando :checked. */
+input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 1.15rem; height: 1.15rem; padding: 0; margin: 0;
+  border: 1.5px solid var(--border-strong); border-radius: 4px;
+  background: var(--white); flex: none; cursor: pointer;
+  position: relative; vertical-align: middle;
+}
+input[type="checkbox"]:checked { background: var(--red-600); border-color: var(--red-600); }
+input[type="checkbox"]:checked::after {
+  content: ""; position: absolute; left: 5px; top: 1px;
+  width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+input[type="checkbox"]:focus { box-shadow: 0 0 0 3px var(--red-soft); }
+
 /* --- botões de ação por item (segunda tela) --- */
 /* flex-wrap: os 5 ícones (cancelar/observação/equivalentes/inserir/trocar)
    quebram em 2 linhas em vez de forçar a coluna a esticar a tabela toda */
@@ -289,6 +308,11 @@ label {
   color: var(--red); background: rgba(220, 38, 38, 0.06); border: 1px solid var(--red-border);
   padding: 0.6rem 0.85rem; border-radius: var(--radius-sm); margin-bottom: 1.1rem;
 }
+/* Variante de sucesso - usada nas telas de resultado em lote (Pedido na
+   loja / Solicitação de compra) em vez de style="background:{{ ... }}"
+   inline, que o VS Code tentava (sem sucesso) interpretar como CSS de
+   verdade por causa do {{ }} do Jinja. */
+.alert.alert-sucesso { color: var(--emerald); background: var(--emerald-soft); border-color: var(--emerald-border); }
 
 /* =================================================================
    SELECT CUSTOMIZADO (tela de seleção)
@@ -533,6 +557,44 @@ table.clickable tbody tr:hover td { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03); 
    8 dígitos) fica menor, só de referência. */
 .table-card table td.mono.codpro-fab { font-size: 0.92rem; font-weight: 800; color: var(--red-600); background: var(--red-soft); border-color: var(--red-border); }
 .table-card table td.mono.codpro-padrao { font-size: 0.66rem; color: var(--text-mute); font-weight: 500; }
+
+/* Tabela de itens da solicitação - todo título e conteúdo centralizado
+   horizontalmente (classe própria, não .table-card table em geral, que
+   também é usada por admin_perfis.html e equivalentes_item.html). */
+.tabela-itens th, .tabela-itens td { text-align: center; vertical-align: middle; }
+.tabela-itens .saldo-lista { align-items: center; }
+/* IMPORTANTE: não usar display:flex/grid direto no <td> - tira a célula do
+   comportamento normal de tabela (deixa de respeitar a largura da coluna e
+   o fundo colorido da linha, aparecendo um retângulo branco solto). Por
+   isso o grid abaixo é aplicado numa <div> DENTRO do td, não no td em si. */
+.acoes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; justify-items: center; align-items: center; }
+
+.text-mute { color: var(--text-mute); }
+
+/* Contador de itens marcados nos botões de "Pedido loja"/"Solicitação compra" */
+.contador-selecao { font-size: 0.78rem; font-weight: 600; color: var(--text-mute); }
+
+/* Balão de observação por item - ícone compacto, só aparece quando o item
+   tem observação; clicar abre o texto completo no mesmo modal dos cards do
+   topo (abrirModal), sem sair da tela. */
+.btn-obs-preview {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; border-radius: 999px; border: 1px solid var(--amber-border);
+  background: var(--amber-soft); cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-obs-preview:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+
+/* Botão de copiar o Cód. Fab. - discreto, ao lado do código na célula
+   (que já tem fundo/cor próprios, então esse botão fica quase invisível
+   até passar o mouse). */
+.btn-copiar-codfab {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.2rem; height: 1.2rem; border-radius: 4px; border: none;
+  background: transparent; color: inherit; opacity: 0.55; cursor: pointer; padding: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.btn-copiar-codfab:hover { opacity: 1; background: rgba(0, 0, 0, 0.06); }
 
 /* Item já cancelado/atendido - sem ações, só consulta */
 .item-acoes.item-acoes-consulta { flex-direction: column; align-items: flex-start; }
