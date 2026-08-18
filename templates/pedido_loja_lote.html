@@ -67,8 +67,14 @@
           {% else %}
           <input type="hidden" name="seqites" value="{{ item.seqite }}">
           <div class="field" style="display:flex; align-items:center; gap:0.75rem;">
-            <label style="flex:1; margin:0;">{{ item.codpro2 }} — {{ item.descricao }}</label>
-            <input type="number" name="qtd_{{ item.seqite }}" step="any" min="0.01" value="{{ item.qtd_sugerida }}" style="width:6rem;" required>
+            <label style="flex:1; margin:0;">
+              {{ item.codpro2 }} — {{ item.descricao }}
+              <span class="aviso-saldo-loja" style="display:none; color:var(--st-separacao); font-weight:600; font-size:0.78rem;">
+                Saldo na loja insuficiente para essa quantidade.
+              </span>
+            </label>
+            <input type="number" name="qtd_{{ item.seqite }}" step="any" min="0.01" value="{{ item.qtd_sugerida }}"
+                   data-qtdest-loja="{{ item.qtdest_loja }}" class="qtd-pedido-loja" style="width:6rem;" required>
           </div>
           {% endif %}
           {% endfor %}
@@ -76,12 +82,50 @@
           {% if itens|rejectattr('sem_saldo')|list %}
           <div style="display:flex; gap:0.75rem; margin-top:1rem;">
             <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">Cancelar</a>
-            <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">Confirmar pedido</button>
+            <button type="submit" class="btn-primary" id="btn-confirmar-pedido-loja" style="flex:1; justify-content:center;">Confirmar pedido</button>
           </div>
           {% else %}
           <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="display:flex; justify-content:center; margin-top:1rem;">Voltar pra solicitação</a>
           {% endif %}
         </form>
+        <script>
+          (function () {
+            const campos = document.querySelectorAll('.qtd-pedido-loja');
+            const botaoConfirmar = document.getElementById('btn-confirmar-pedido-loja');
+
+            function algumInsuficiente() {
+              return Array.from(campos).some(function (campo) {
+                const qtdestLoja = parseFloat(campo.dataset.qtdestLoja) || 0;
+                const qtd = parseFloat(campo.value.replace(',', '.')) || 0;
+                return qtd > qtdestLoja;
+              });
+            }
+
+            function verificar(campo) {
+              const aviso = campo.closest('.field').querySelector('.aviso-saldo-loja');
+              const qtdestLoja = parseFloat(campo.dataset.qtdestLoja) || 0;
+              const qtd = parseFloat(campo.value.replace(',', '.')) || 0;
+              aviso.style.display = qtd > qtdestLoja ? 'block' : 'none';
+              if (botaoConfirmar) {
+                botaoConfirmar.disabled = algumInsuficiente();
+              }
+            }
+
+            campos.forEach(function (campo) {
+              campo.addEventListener('input', function () { verificar(campo); });
+              verificar(campo);
+            });
+
+            const form = campos.length ? campos[0].closest('form') : null;
+            if (form) {
+              form.addEventListener('submit', function (evento) {
+                if (algumInsuficiente()) {
+                  evento.preventDefault();
+                }
+              });
+            }
+          })();
+        </script>
       {% endif %}
     </div>
   </div>

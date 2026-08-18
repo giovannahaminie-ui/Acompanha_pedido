@@ -162,12 +162,23 @@ Botão fica visível na tela por decisão consciente.
   enviado é `item["codpro1"]` (interno da própria empresa — diferente do
   Pedido na loja, que manda `codpro2` porque ali o `codEmp` do webservice é
   a RTL).
-- **Erro atual**: "Problemas ao encontrar Família/Produto/Unidade de
-  medida", mesmo com produto certo e `uniMed="UN"` confirmado correto
-  (testado com 2 produtos, mesmo erro). Suspeita: `numPed` (hoje igual a
-  `numsol`) não é um pedido de compra real — no exemplo original fornecido,
-  `numPed` e `numSol` eram números diferentes. Precisa confirmar a origem
-  do `numPed`/`filPed` antes de habilitar.
+- **`numPed` corrigido** (2026-08-18): era enviado igual a `numsol_compra`
+  (a própria solicitação recém-gerada); agora manda `item["numped"]` — o
+  número da O.S./pedido real vinculado ao item (mesmo valor já usado pra
+  achar `filexe`/`cod_dep` logo acima na rota). Confirmado no log
+  (`numPed=129795` ≠ `numSol=26`).
+- **Erro atual, mesmo com `numPed` corrigido**: "Problemas ao encontrar
+  Família/Produto/Unidade de medida nas Tabelas de Familia/Produto/UM
+  '<codpro>'". Investigado direto no Oracle (2026-08-18) pro caso do log:
+  produto `50017649`, empresa 1 — **cadastro bate**: `E075PRO` (produto
+  ativo, `codFam=50559`, `uniMed=UN`), `E012FAM` (família ativa,
+  `uniMed=UN`, mesma família do produto), `E210EST` (produto tem linha no
+  depósito 1 enviado). Não é falta de cadastro de produto/família/UM — o
+  erro vem de outra validação interna do serviço (Senior/Sapiens),
+  possivelmente ligada a `codTns` ("91400", fixo no código) não liberado
+  pra essa família/depósito, ou a algum parâmetro do G5 fora do alcance de
+  uma consulta SQL. Precisa isolar via SoapUI (variar `codTns`/`filPed`
+  com o mesmo produto) ou verificar parametrização de TNS no G5.
 - Cada tentativa (mesmo com erro) já gera uma linha órfã em `E405SOL`.
 
 ### 5.7 Conferência com reserva (`/solicitacao/<codemp>/<codfil>/<numsol>/conferencia`)
@@ -223,8 +234,9 @@ funciona, ver 5.6.
 
 ## 8. Pontos em aberto
 
-- **Solicitação de compra não funciona** — falta confirmar origem de
-  `numPed`/`filPed` do item de compra (ver 5.6).
+- **Solicitação de compra não funciona** — `numPed` já corrigido, mas
+  serviço ainda recusa com erro de Família/Produto/UM mesmo com cadastro
+  batendo; falta isolar `codTns`/parametrização no G5 (ver 5.6).
 - **Conferência com reserva** não valida saldo físico antes de reservar
   (ver 5.7) — decidir se aplica a mesma trava do Pedido na loja.
 - **Pedidos/solicitações órfãos no Sapiens** deixados por tentativas com

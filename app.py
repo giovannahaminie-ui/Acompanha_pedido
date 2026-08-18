@@ -459,11 +459,11 @@ def _dados_e_sugestao_loja(codemp, codfil, item):
     filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
     dados_loja = oracle_db.dados_pedido_loja(codemp, filexe)
     if not dados_loja:
-        return None, 0
+        return None, 0, 0
     qtdest_loja = oracle_db.get_qtd_deposito(dados_loja["codemp_loja"], dados_loja["coddep_loja"], item["codpro2"])
     saldo_solicitacao = item["qtd_aberta"] - item["qtd_mso"]
     qtd_sugerida = qtdest_loja + saldo_solicitacao if item["qtd_aberta"] > qtdest_loja else item["qtd_aberta"]
-    return dados_loja, qtd_sugerida
+    return dados_loja, qtd_sugerida, qtdest_loja
 
 
 # ---------------------------------------------------------------------
@@ -500,9 +500,12 @@ def pedido_loja_lote(codemp, codfil, numsol):
                 resultados.append({"item": item, "sucesso": False, "mensagem": "Quantidade inválida."})
                 continue
 
-            dados_loja, _ = _dados_e_sugestao_loja(codemp, codfil, item)
+            dados_loja, _, qtdest_loja = _dados_e_sugestao_loja(codemp, codfil, item)
             if not dados_loja:
                 resultados.append({"item": item, "sucesso": False, "mensagem": "Sem regra de pedido de loja pra essa empresa/filial."})
+                continue
+            if qtd > qtdest_loja:
+                resultados.append({"item": item, "sucesso": False, "mensagem": "Saldo na loja insuficiente para essa quantidade."})
                 continue
 
             produto = oracle_db.buscar_produto_preco(dados_loja["codemp_loja"], dados_loja["codfil_loja"], None, item["codpro2"])
@@ -531,8 +534,10 @@ def pedido_loja_lote(codemp, codfil, numsol):
 
     itens_com_sugestao = []
     for item in itens_marcados:
-        _, qtd_sugerida = _dados_e_sugestao_loja(codemp, codfil, item)
-        itens_com_sugestao.append({**item, "qtd_sugerida": qtd_sugerida, "sem_saldo": not item["saldos"]})
+        _, qtd_sugerida, qtdest_loja = _dados_e_sugestao_loja(codemp, codfil, item)
+        itens_com_sugestao.append({
+            **item, "qtd_sugerida": qtd_sugerida, "qtdest_loja": qtdest_loja, "sem_saldo": not item["saldos"],
+        })
 
     return render_template(
         "pedido_loja_lote.html", codemp=codemp, codfil=codfil, numsol=numsol,
@@ -542,8 +547,9 @@ def pedido_loja_lote(codemp, codfil, numsol):
 
 # ---------------------------------------------------------------------
 # Solicitação de compra em lote - mesmo padrão do pedido na loja acima.
-# A gravação de verdade (GerarSolicitacaoCompra_3) continua travada: falta
-# confirmar numPed/filPed/codTns do item de compra (ver conversa anterior).
+# numPed do item de compra = numero da OS (item["numped"]), não o numsol_compra
+# recém-gerado. A gravação de verdade (GerarSolicitacaoCompra_3) segue com
+# filPed/codTns ainda a confirmar (ver conversa anterior).
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/solicitacao_compra", methods=["POST"])
 @login_obrigatorio
@@ -576,7 +582,7 @@ def solicitacao_compra_lote(codemp, codfil, numsol):
             try:
                 pedido_ws.gerar_solicitacao_compra(
                     codemp=codemp, numsol=numsol_compra, cod_dep=cod_dep, codpro=item["codpro1"],
-                    cod_tns="91400", dat_prv=datetime.now(), fil_ped=codfil, num_ped=numsol_compra,
+                    cod_tns="91400", dat_prv=datetime.now(), fil_ped=codfil, num_ped=item["numped"],
                     obs_sol=f"Solicitação {numsol} item {item['seqite']}", pre_sol=None, qtd_sol=qtd,
                     usu_sol=session["usuario"],
                 )
