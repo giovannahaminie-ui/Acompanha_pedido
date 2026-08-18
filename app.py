@@ -485,7 +485,7 @@ def pedido_loja_lote(codemp, codfil, numsol):
 
     if request.form.get("confirmar"):
         resultados = [None] * len(itens_marcados)
-        itens_validos = []  # [(indice, item, qtd, dados_loja)]
+        itens_validos = []
 
         for indice, item in enumerate(itens_marcados):
             if not item["saldos"]:
@@ -526,9 +526,20 @@ def pedido_loja_lote(codemp, codfil, numsol):
                     [{"codpro": item["codpro2"], "qtd": qtd, "preco": preco} for _, item, qtd, preco, _ in itens_validos],
                     tns_pro="90100", usuario=session["usuario"],
                 )
+
+                seqites_validos = [item["seqite"] for _, item, _, _, _ in itens_validos]
                 for (indice, item, qtd, _preco, _dl), resultado_ws in zip(itens_validos, resultados_ws):
                     if resultado_ws["sucesso"]:
                         oracle_db.somar_qtd_mso_item(codemp, codfil, numsol, item["seqite"], qtd)
+                        local_db.registrar_acao(
+                            tipo_acao="pedido_criado",
+                            usuario=session["usuario"],
+                            codemp=codemp,
+                            codfil=codfil,
+                            numsol=numsol,
+                            numped=numped,
+                            detalhes=f"Produto {item['codpro2']}, Quantidade {qtd}"
+                        )
                         resultados[indice] = {
                             "item": item, "sucesso": True, "numped": numped,
                             "mensagem": "Pedido gerado com sucesso.",
@@ -538,6 +549,33 @@ def pedido_loja_lote(codemp, codfil, numsol):
                             "item": item, "sucesso": False,
                             "mensagem": resultado_ws["mensagem"] or "Erro não especificado.",
                         }
+
+                if any(r["sucesso"] for r in resultados if r is not None):
+                    try:
+                        cod_for = oracle_db.get_codfor_filial(dados_loja["codemp_loja"], dados_loja["codfil_loja"])
+                        if cod_for:
+                            numocp, sucesso_oc, msg_oc = pedido_ws.gerar_ordem_compra(
+                                codemp=dados_loja["codemp_loja"], codfil=dados_loja["codfil_loja"],
+                                cod_for=cod_for,
+                                itens=[{"codpro": item["codpro2"], "qtd": qtd, "preco": preco}
+                                       for _, item, qtd, preco, _ in itens_validos],
+                                numsol=numsol, numped=numped,
+                            )
+                            if sucesso_oc:
+                                oracle_db.atualizar_pedido_com_oc(dados_loja["codemp_loja"], dados_loja["codfil_loja"], numped)
+                                oracle_db.atualizar_itens_solicitacao_com_oc(codemp, codfil, numsol, seqites_validos)
+                                local_db.registrar_acao(
+                                    tipo_acao="oc_gerada",
+                                    usuario=session["usuario"],
+                                    codemp=codemp,
+                                    codfil=codfil,
+                                    numsol=numsol,
+                                    numped=numped,
+                                    numocp=numocp,
+                                    detalhes=msg_oc
+                                )
+                    except pedido_ws.PedidoWebserviceError as e:
+                        pass
             except pedido_ws.PedidoWebserviceError as e:
                 for indice, item, _qtd, _preco, _dl in itens_validos:
                     resultados[indice] = {"item": item, "sucesso": False, "mensagem": str(e)}
@@ -619,6 +657,14 @@ def solicitacao_compra_lote(codemp, codfil, numsol):
                     if resultado_ws and resultado_ws["sucesso"]:
                         oracle_db.salvar_numsco_item(codemp, codfil, numsol, item["seqite"], numsol_compra)
                         oracle_db.somar_qtd_mso_item(codemp, codfil, numsol, item["seqite"], qtd)
+                        local_db.registrar_acao(
+                            tipo_acao="solicitacao_compra_gerada",
+                            usuario=session["usuario"],
+                            codemp=codemp,
+                            codfil=codfil,
+                            numsol=numsol,
+                            detalhes=f"Solicitação compra {numsol_compra}: Produto {item['codpro1']}, Quantidade {qtd}"
+                        )
                         resultados[indice] = {
                             "item": item, "sucesso": True, "numsol_compra": numsol_compra,
                             "mensagem": f"Solicitação de compra {numsol_compra} gerada com sucesso.",
@@ -680,7 +726,33 @@ def equivalentes_item(codemp, codfil, numsol, seqite, codpro):
 
 # ---------------------------------------------------------------------
 # Administração de perfis (só Gerência)
-# ---------------------------------------------------------------------
+# ===== HISTÓRICO DE AÇÕES =====
+@app.route("/historico/<int:codemp>/<int:codfil>/<int:numsol>")
+@login_obrigatorio
+def historico_solicitacao(codemp, codfil, numsol):
+    """Mostra o histórico de ações de uma solicitação."""
+    acoes = local_db.listar_historico_por_solicitacao(codemp, codfil, numsol)
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    return render_template(
+        "historico.html",
+        codemp=codemp, codfil=codfil, numsol=numsol,
+        tipo="solicitacao",
+        acoes=acoes,
+        detalhe=detalhe
+    )
+
+
+@app.route("/historico/geral")
+@login_obrigatorio
+def historico_geral():
+    """Mostra o histórico geral de todas as ações."""
+    if perfil_atual() != "G":
+        return redirect(url_for("painel"))
+    acoes = local_db.listar_historico_geral(limite=200)
+    return render_template("historico_geral.html", acoes=acoes)
+
+
+# ===== ÁREA ADMINISTRATIVA =====
 @app.route("/admin/perfis")
 @login_obrigatorio
 def admin_perfis():

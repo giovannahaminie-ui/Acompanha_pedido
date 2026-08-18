@@ -30,8 +30,7 @@ def get_connection():
     )
 
 # ---------------------------------------------------------------------
-# Autenticação - identifica o usuário pelo código do Sapiens (não existe
-# senha individual cadastrada, são o código/crachá).
+# Autenticação - identifica o usuário pelo código do Sapiens (por enquanto)
 # ---------------------------------------------------------------------
 
 SQL_LOGIN = """
@@ -86,7 +85,7 @@ def listar_usuarios_ativos():
 
 
 # ---------------------------------------------------------------------
-# Select das solicitações a serem exibidas na tela
+# Select das solicitações a serem exibidas na tela:
 # ---------------------------------------------------------------------
 SQL_SOLICITACOES = """
                 SELECT s.USU_CODEMP,
@@ -200,11 +199,6 @@ def _fmt_hora(valor):
 
 
 def _fmt_qtd(valor):
-    """
-    Quantidades vem do Oracle como NUMBER (ex: 1.0) - exibir sem casas
-    decimais quando o valor for inteiro (1, nÃ£o 1.0).
-    
-    """
     if valor is None:
         return 0
     return int(valor) if valor == int(valor) else valor
@@ -238,7 +232,7 @@ def _classificar_por_etapa(rows):
 
 
 # ---------------------------------------------------------------------
-# Select dos itens de uma solicitação (para a segunda tela / detalhe)
+# Select dos itens de uma solicitação (para a segunda tela / detalhe):
 # ---------------------------------------------------------------------
 SQL_ITENS_SOLICITACAO = """
                 SELECT i.usu_seqite,
@@ -283,7 +277,7 @@ SQL_ITENS_SOLICITACAO = """
                 ORDER BY i.usu_sitite, i.usu_seqite
 """
 
-# Select de saldo de estoque - duas variações (empresas 1/2/12 e a 5)
+# Select de saldo de estoque - duas variações (empresas 1/2/12 e a 5):
 SQL_SALDO_ESTOQUE_PADRAO = """
             SELECT CASE WHEN e.codemp=2 AND e.coddep='1' THEN 'RTL LD'
                 WHEN e.codemp=2 AND e.coddep='2' THEN 'RTL PP'
@@ -404,7 +398,7 @@ def get_solicitacao_detalhe(codemp, codfil, numsol):
         sitite = row["usu_sitite"]
         # Item já cancelado (3) ou atendido (4, 6) - não busca saldo de
         # estoque, fica de consulta na tela (botões de ações escondidos
-        # no template).
+        # no template):
         if sitite in (3, 4, 6):
             saldos = []
         else:
@@ -584,9 +578,9 @@ def get_item_solicitacao(codemp, codfil, numsol, seqite):
     }
 
 def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, usuario, motivo=None):
-    """Cancela o item na solicitação (T120SIT) - nÃ£o mexe no pedido nem
+    """Cancela o item na solicitação (T120SIT) - não mexe no pedido nem
     chama webservice. A usu_obsite recebe uma mensagem gerada com
-    data/hora/usuÃ¡rio/motivo - CONCATENA com o texto anterior (não
+    data/hora/usuário/motivo - CONCATENA com o texto anterior (não
     sobrescreve, mesmo padrão da Observação de item). Dois caminhos,
     decididos pela usu_qtdmov atual do item:
       - SEM movimentação (usu_qtdmov=0): cancela o item inteiro de uma vez
@@ -615,7 +609,7 @@ def cancelar_item_solicitacao(codemp, codfil, numsol, seqite, usuario, motivo=No
     return True
 
 # ---------------------------------------------------------------------
-# Cancelamento PARCIAL do item substituÃ­do numa Troca - diferente do botão
+# Cancelamento PARCIAL do item substituido numa Troca - diferente do botão
 # Cancelar (que sempre cancela o item inteiro): aqui a quantidade que
 # está sendo trocada e cancelada (ex: 3 unidades solicitadas, troca são 1,
 # as outras 2 continuam em aberto no item original). 3 UPDATEs em
@@ -1189,3 +1183,62 @@ def conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, qtdcon):
     conn.commit()
     conn.close()
     return True
+
+SQL_FORNECEDOR_FILIAL = """
+                    SELECT filfor FROM sapiens.E070FIL
+                            WHERE codemp = :codemp
+                            AND codfil = :codfil
+"""
+
+def get_codfor_filial(codemp, codfil):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_FORNECEDOR_FILIAL, codemp=codemp, codfil=codfil)
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+# ---------------------------------------------------------------------
+# Ordem de Compra - UPDATEs após sucesso
+# ---------------------------------------------------------------------
+
+SQL_UPDATE_PEDIDO_OC = """
+                UPDATE sapiens.E120PED
+                    SET obsped = :obs_oc
+                    WHERE codemp = :codemp
+                    AND codfil = :codfil
+                    AND numped = :numped
+"""
+
+def atualizar_pedido_com_oc(codemp, codfil, numped):
+    """Marca o pedido (E120PED) com observação de que a OC foi gerada."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_UPDATE_PEDIDO_OC, {"obs_oc": "Ordem de compra com estoque", "codemp": codemp, "codfil": codfil, "numped": numped})
+    conn.commit()
+    conn.close()
+
+SQL_UPDATE_ITEM_SOLICITACAO_OC = """
+                UPDATE sapiens.USU_T120SIT
+                    SET usu_obsite = :obs_item
+                    WHERE usu_codemp = :codemp
+                    AND usu_codfil = :codfil
+                    AND usu_numsol = :numsol
+                    AND usu_seqite IN ({})
+"""
+
+def atualizar_itens_solicitacao_com_oc(codemp, codfil, numsol, seqites):
+    """Marca os itens da solicitação (USU_T120SIT) com observação de OC gerada."""
+    if not seqites:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    placeholders = ",".join([f":{i}" for i in range(len(seqites))])
+    sql = SQL_UPDATE_ITEM_SOLICITACAO_OC.format(placeholders)
+    params = {"codemp": codemp, "codfil": codfil, "numsol": numsol, "obs_item": f"Solicitação {numsol} - Pedido"}
+    for i, seqite in enumerate(seqites):
+        params[str(i)] = seqite
+    cur.execute(sql, params)
+    conn.commit()
+    conn.close()

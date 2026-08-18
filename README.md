@@ -1,10 +1,5 @@
 # Acompanha Pedido — Estoque Retífica
 
-Sistema em Flask + Oracle (Sapiens) + SQLite local que substitui a tela atual
-de **Acompanhamento de Solicitações de Peças**. Fluxo: a usinagem (Retífica)
-solicita uma peça no estoque; alguém da boqueta assume a solicitação e
-separa; depois a peça é retirada/conferida.
-
 > Status: painel, detalhe da solicitação, Cancelar/Trocar/Inserir peça,
 > Pedido na loja e Conferência com reserva funcionando. Solicitação de
 > compra **não funciona ainda**. Lista completa de pontos em aberto na
@@ -234,33 +229,18 @@ funciona, ver 5.6.
 
 ## 8. Pontos em aberto
 
-- **Solicitação de compra não funciona** — `numPed` já corrigido, mas
-  serviço ainda recusa com erro de Família/Produto/UM mesmo com cadastro
-  batendo; falta isolar `codTns`/parametrização no G5 (ver 5.6).
-- **Conferência com reserva** não valida saldo físico antes de reservar
-  (ver 5.7) — decidir se aplica a mesma trava do Pedido na loja.
-- **Pedidos/solicitações órfãos no Sapiens** deixados por tentativas com
-  erro (Pedido na loja e Solicitação de compra) — sem limpeza automática,
-  checagem manual.
 - **Restringir ações por perfil** — hoje qualquer usuário logado executa
   tudo (ver seção 3).
+
 - **Definir quem/como registra "Atendido/parcial"** fora da Conferência com
   reserva — se ela substitui essa pendência ou se ainda falta algo.
-- **Coluna `usu_obsite`** na `usu_t120sit` — se não existir no ambiente, as
-  telas de observação avisam em vez de quebrar (`try/except` em `app.py`).
   DDL: `ALTER TABLE sapiens.usu_t120sit ADD usu_obsite VARCHAR2(250);`
-- **Validar `opeExe="A"`** (pedido existente) do `GravarPedidos_15` contra
-  um pedido real — Inserir peça/Trocar item usam esse caminho, ainda não
-  testado de ponta a ponta em produção.
-- **Confirmar depósito da RTL** (`L`→`1`, `P`→`2`) contra caso real (ver
-  seção 1) — inferido, não testado.
+
 - `SQL_PRODUTO_ATIVO_PRECO` traz uma regra de depósito por `codfil`
   (`10`/`1001`→`3`, senão `1`) que não é usada em lugar nenhum — avaliar se
   vale remover.
-- `get_solicitacao_cabecalho` reaproveita `SQL_SOLICITACOES` (filtro de 180
-  dias / `usu_sitsol NOT IN (3,6,9)`) — abrir detalhe de solicitação
-  cancelada ou com mais de 180 dias retorna cabeçalho vazio.
-- **Crachá com código de barras (Code128, 8 dígitos)** — em discussão, nada
+
+- **Crachá com código de barras (Code128, 10 dígitos)** — em discussão, nada
   implementado. O código não é o `codusu` do Sapiens direto, precisa de
   tabela de-para (crachá → `codusu`) que ainda não existe — local (SQLite)
   ou importada de outro sistema, a definir.
@@ -296,7 +276,7 @@ acompanha_pedido/
     pedido_loja_lote.html
     solicitacao_compra_lote.html
     conferencia_reserva.html
-    historico_item.html          # sem atalho na tabela (ver 5.3)
+    historico_item.html          
   static/
     css/style.css
 ```

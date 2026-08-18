@@ -321,3 +321,68 @@ def gerar_solicitacao_compra_lote(codemp, numsol_compra, itens, usu_sol):
             "mensagem": getattr(retorno, "msgRet", None) or "",
         }
     return resultados
+
+# ---------------------------------------------------------------------
+# Ordem de compra (GravarOrdensCompra_5) - Gerado ao fechar o pedido da loja
+# ---------------------------------------------------------------------
+OC_WS_WSDL = os.environ.get("OC_WS_WSDL", "")
+OC_WS_USER = os.environ.get("OC_WS_USER", "")
+OC_WS_PASSWORD = os.environ.get("OC_WS_PASSWORD", "")
+
+def _get_client_oc():
+    if not (OC_WS_WSDL and OC_WS_USER and OC_WS_PASSWORD):
+        raise PedidoWebserviceError(
+            "Webservice de Ordem de Compra não configurado - faltam "
+            "OC_WS_WSDL/OC_WS_USER/OC_WS_PASSWORD no .env."
+        )
+    import zeep
+    from zeep.plugins import HistoryPlugin
+    history = HistoryPlugin()
+    client = zeep.Client(OC_WS_WSDL, plugins=[history])
+    return client, history
+
+def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped):
+    """itens: lista de dicts {codpro, qtd, preco}.
+    Retorna (numocp, sucesso, mensagem)."""
+    client, history = _get_client_oc()
+    try:
+        resposta = client.service.GravarOrdensCompra_5(
+            user=OC_WS_USER, password=OC_WS_PASSWORD, encryption=0,
+            parameters={
+                "tipoProcessamento": 1,
+                "identificadorSistema": "INTEGRADO",
+                "dadosGerais": [{
+                    "codEmp": codemp,
+                    "codFil": codfil,
+                    "codFor": cod_for,
+                    "tipoProcessamento": 1,
+                    "tnsPro": "90403",
+                    "obsOcp": f"Solicitação {numsol} - Pedido {numped}",
+                    "produtos": [
+                        {
+                            "codPro": item["codpro"],
+                            "qtdPed": item["qtd"],
+                            "preUni": item["preco"],
+                            "uniMed": "UN",
+                        }
+                        for item in itens
+                    ],
+                }],
+            },
+        )
+    finally:
+        _log_envelopes(history, "gerar_ordem_compra")
+
+    erro_execucao = getattr(resposta, "erroExecucao", None)
+    if (erro_execucao or "").strip().upper() == "S":
+        raise PedidoWebserviceError(
+            getattr(resposta, "mensagemRetorno", None) or "Erro não especificado no GravarOrdensCompra."
+        )
+
+    dados_retorno = resposta.dadosRetorno or []
+    if not dados_retorno:
+        raise PedidoWebserviceError("GravarOrdensCompra não retornou a OC gerada.")
+    retorno = dados_retorno[0]
+    tip_ret = getattr(retorno, "tipRet", None)
+    sucesso = tip_ret is not None and int(tip_ret) == 1
+    return retorno.numOcp, sucesso, (getattr(retorno, "retorno", None) or "")
