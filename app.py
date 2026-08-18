@@ -265,19 +265,19 @@ def inserir_item(codemp, codfil, numsol):
                     erro = f"Produto {codpro_novo} está inativo."
                 elif not produto["preco"]:
                     erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
-                elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, cabecalho["numped"], codpro_novo):
+                elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, cabecalho["numped"], produto["codpro"]):
                     erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
-                elif oracle_db.produto_ja_esta_no_pedido(codemp, codfil, cabecalho["numped"], codpro_novo):
+                elif oracle_db.produto_ja_esta_no_pedido(codemp, codfil, cabecalho["numped"], produto["codpro"]):
                     erro = f"Produto {codpro_novo} já existe nesse pedido."
 
         if not erro and request.form.get("confirmar"):
             try:
                 seqipd_novo = pedido_ws.incluir_item_pedido(
-                    codemp, codfil, cabecalho["numped"], codpro_novo, qtd,
+                    codemp, codfil, cabecalho["numped"], produto["codpro"], qtd,
                     produto["preco"], produto["codtab"], session["usuario"],
                 )
                 oracle_db.inserir_item_solicitacao(
-                    codemp, codfil, numsol, cabecalho["numped"], seqipd_novo, codpro_novo,
+                    codemp, codfil, numsol, cabecalho["numped"], seqipd_novo, produto["codpro"],
                     produto["descricao"], qtd, session["usuario"],
                 )
                 return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
@@ -382,7 +382,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
                     erro = f"Produto {codpro_novo} está inativo."
                 elif not produto["preco"]:
                     erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
-                elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], codpro_novo):
+                elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], produto["codpro"]):
                     erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
 
         # Produto passou por todas as checagens - mostra a etapa de
@@ -424,11 +424,11 @@ def trocar_item(codemp, codfil, numsol, seqite):
                         else None
                     ) 
                     seqipd_novo = pedido_ws.incluir_item_pedido(
-                        codemp, codfil, item["numped"], codpro_novo, qtd,
+                        codemp, codfil, item["numped"], produto["codpro"], qtd,
                         preco_incluir, produto["codtab"], session["usuario"],
                     )
                     seqite_novo = oracle_db.inserir_item_solicitacao(
-                        codemp, codfil, numsol, item["numped"], seqipd_novo, codpro_novo,
+                        codemp, codfil, numsol, item["numped"], seqipd_novo, produto["codpro"],
                         produto["descricao"], qtd, session["usuario"], veio_de_troca=True,
                     )
                     if alerta_preco:

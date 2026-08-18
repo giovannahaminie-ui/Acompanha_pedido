@@ -776,11 +776,11 @@ def buscar_produto_preco(codemp, codfil, numped, codpro):
     conn.close()
     if not prod_row:
         return None
-    _codpro_enc, prebas, _coddep, _qtdabe, _qtdped, codmar, despro, _seqipd = prod_row
+    codpro_enc, prebas, _coddep, _qtdabe, _qtdped, codmar, despro, _seqipd = prod_row
 
     preco = float(prebas) if prebas is not None else None
     return {
-        "codpro": codpro, "descricao": despro, "marca": (codmar or "").strip() or None,
+        "codpro": codpro_enc, "descricao": despro, "marca": (codmar or "").strip() or None,
         "ativo": True, "codtab": CODTPR_PADRAO, "preco": preco,
     }
 
@@ -1137,13 +1137,14 @@ def get_item_para_conferencia(codemp, codfil, numsol, codpro):
         "seqipd": seqipd, "numped": numped,
     }
 
-
 SQL_CONFERIR_ITEM_SOLICITACAO = """
                 UPDATE sapiens.USU_T120SIT
                     SET usu_qtdate = usu_qtdate + :qtdcon,
                         usu_qtdabe = usu_qtdabe - :qtdcon
-                WHERE usu_codemp=:codemp AND usu_codfil=:codfil
-                AND usu_numsol=:numsol AND usu_seqite=:seqite
+                WHERE usu_codemp=:codemp 
+                AND usu_codfil=:codfil
+                AND usu_numsol=:numsol
+                AND usu_seqite=:seqite
 """
 
 SQL_RESERVAR_ESTOQUE = """
@@ -1197,7 +1198,6 @@ def get_codfor_filial(codemp, codfil):
     row = cur.fetchone()
     conn.close()
     return row[0] if row else None
-
 
 # ---------------------------------------------------------------------
 # Ordem de Compra - UPDATEs após sucesso

@@ -15,8 +15,7 @@
   Na RTL é o inverso: `codpro1` é do fabricante, `codpro2` é o interno. A tela
   sempre exibe os dois lado a lado.
 - Filial: `usu_filexe` (em `E120PED`) guarda **letra**, não código numérico —
-  `L` Londrina, `P` Prudente, `C` Cambé (lista `FILIAIS` em `app.py`). Filial
-  nova = só adicionar a letra na lista.
+  `L` Londrina, `P` Prudente, `C` Cambé (CRAF) 
 - Depósito por empresa/filial (`oracle_db.get_coddep_esperado`): empresa 1 —
   `L`→`1`, `P`→`3`, `C`→`5`; empresa 2 (RTL) — `L`→`1`, `P`→`2` (**não
   confirmado contra dado real**); empresas 5 e 12 — sempre `1`.
