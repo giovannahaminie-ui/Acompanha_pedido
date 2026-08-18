@@ -1,41 +1,8 @@
 """
-Cliente do webservice GravarPedidos (Sapiens/Senior) - usado só pelos fluxos de
-Troca e Inserção de peça, pra cancelar/incluir item no PEDIDO (E120IPD). A
-solicitação (T120SIT) é gravada à parte por meio de UPDATE, direto no Oracle, 
-e só depois o webservice é chamado pra mexer no pedido real. 
+Estrutura de Webservices, utilizados para Incluir Item no pedido, 
+Pedido na Loja e Solicitação de Compra
 
-Estrutura da chamada validada por introspecção do WSDL real (GravarPedidos_15)
-e por testes reais (via SoapUI, fora deste código):
-  - `opeExe` é obrigatório em `pedido` e em cada `produto` - marca o tipo de
-    operação daquele nível: "I" = incluir, "A" = alterar (existente).
-    Confirmado por teste real: "I"/"I" cria pedido+item do zero (pedido
-    781740). "A" no pedido também foi aceito sem reclamação (um teste com
-    numPed em branco falhou só por falta do numPed, não por causa do opeExe).
-    Como Trocar/Inserir peça sempre mexem num pedido que JÁ EXISTE, usamos
-    pedido.opeExe="A"; no produto, "I" pra item novo (inclusão/troca) e "A"
-    pra alterar um item existente (cancelamento, via seqIpd).
-  - Cada `produto` tem campo nativo `usuGer` (quem incluiu) mas NÃO tem campo
-    nativo `usuAlt` - pra registrar quem alterou/cancelou um item existente,
-    usa-se o mecanismo genérico `usuario: [{cmpUsu, vlrUsu}]` com
-    cmpUsu="USUALT".
-  - A resposta devolve, por produto processado (`respostaPedido.gridPro`), o
-    `seqIpd` da linha - é esse valor que vai pra usu_t120sit.usu_seqipd
-    quando o item é novo (inclusão/troca).
-  - `erroExecucao` vazio/nulo NÃO significa sucesso por si só - um teste real
-    (opeExe="A" mas numPed em branco) voltou com erroExecucao nil e
-    mensagemRetorno "Processado com Sucesso." no nível raiz, mas o pedido em
-    si falhou (`respostaPedido.tipRet=2`, `msgRet`="É necessário informar o
-    número do pedido..."). O sucesso de verdade por pedido está em
-    `respostaPedido.tipRet==1` (1=sucesso, 2=erro nos testes reais) - é isso
-    que _chamar_gravar_pedidos confere, não só o erroExecucao do topo.
-  - `qtdPed`/`qtdCan`/`preUni` são `xs:string` no XSD, não número - o Sapiens
-    exige vírgula decimal ("384,41", não "384.41"), confirmado por erro real
-    ('O valor informado para o campo "PreUni" não é numérico. O separador
-    decimal padrão é ","'). Ver _fmt_numero().
-  - o erro de negócio de verdade às vezes vem só no `gridPro.retorno` (por
-    item), não no `msgRet`/`retorno` do pedido - esse último pode ficar
-    genérico ("Verifique as entidades ligadas ao pedido...") enquanto o
-    motivo real está um nível abaixo, no item específico que falhou.
+Placeholder (Estoque - TransacaoProduto)
 
 Todo envelope SOAP enviado/recebido é gravado em texto puro (senha mascarada)
 em logs/pedido_ws_envelopes.log - assim dá pra conferir exatamente o XML que
@@ -49,10 +16,13 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ---------------------------------------------------------------------
+# Webservice (GravarPedido_15) - Incluir item no pedido
+# ---------------------------------------------------------------------
 
 PEDIDO_WS_WSDL = os.environ.get("PEDIDO_WS_WSDL", "")
 PEDIDO_WS_USER = os.environ.get("PEDIDO_WS_USER", "")
@@ -70,7 +40,6 @@ if not logger.handlers:
     _handler = logging.FileHandler(_LOG_DIR / "pedido_ws_envelopes.log", encoding="utf-8")
     _handler.setFormatter(logging.Formatter("\n%(asctime)s [%(levelname)s]\n%(message)s"))
     logger.addHandler(_handler)
-
 
 class PedidoWebserviceError(Exception):
     """Erro de configuração ou retornado pelo próprio webservice (erroExecucao/retorno)."""
@@ -120,6 +89,7 @@ def _salvar_xml_arquivos(history, operacao):
     logs/xml/ (um par por chamada, nomeado com timestamp + operação) - além
     do log de texto único (_log_envelopes), pra poder abrir cada retorno
     isolado (ex: num editor de XML) sem procurar dentro do log grande."""
+
     agora = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     for sufixo, entrada in (("enviado", history.last_sent), ("recebido", history.last_received)):
         xml = _envelope_para_texto(entrada)
@@ -211,33 +181,73 @@ def incluir_item_pedido(codemp, codfil, numped, codpro, qtd, preco, codtab, usua
     return _seqipd_da_resposta(resposta, codpro)
 
 # ---------------------------------------------------------------------
-# Pedido na loja (RTL) - mesmo webservice GravarPedidos_15 já usado por
-# incluir_item_pedido, mas com resEst/tnsPro e apontando pra loja. O pedido
-# é sempre NOVO (opeExe="I" no nível do pedido, não "A") - o número é
-# gerado pelo Sapiens na hora, não existe um pedido aberto de antemão pra
-# reaproveitar. Por isso não recebe numped, e sim codCli (pra abrir o
-# pedido do zero).
+# Webservice (GravarPedido_15) - Pedido na loja (RTL)
 # ---------------------------------------------------------------------
-def incluir_item_pedido_loja(codemp_loja, codfil_loja, codcli, codpro, qtd, preco, tns_pro, usuario):
-    """Retorna (seqipd, numped) - numped é o número do pedido novo que o
-    Sapiens gerou, pra mostrar na tela pra pessoa copiar."""
+
+def incluir_itens_pedido_loja(codemp_loja, codfil_loja, codcli, itens, tns_pro, usuario):
+    """Grava um único pedido novo com todos os itens (lista de dicts
+    {codpro, qtd, preco}) como linhas desse mesmo pedido - antes cada item
+    virava um pedido separado, um de cada vez.
+
+    Retorna (numped, resultados) - numped é o número do pedido novo gerado
+    pelo Sapiens (compartilhado por todos os itens); resultados é uma lista
+    paralela a `itens`, cada item {sucesso, seqipd, mensagem}. Assume que o
+    gridPro devolvido vem na mesma ordem em que os produtos foram enviados
+    (não confirmado com um teste real de mais de um item ainda - se algum
+    dia vier fora de ordem, dá pra casar por codPro em vez de por índice).
+    """
     pedido = {
         "opeExe": "I", "codEmp": codemp_loja, "codFil": codfil_loja, "codCli": codcli,
-        "produto": [{
-            "opeExe": "I",
-            "codPro": codpro, "qtdPed": _fmt_numero(qtd), "preUni": _fmt_numero(preco),
-            "tnsPro": tns_pro, "resEst": "S",
-            "usuGer": str(usuario),
-        }],
+        "fecPed": "S",
+        "usuario": [
+            {"cmpUsu": "usu_sitent", "vlrUsu": "4"},
+            {"cmpUsu": "usu_sitped", "vlrUsu": "6"},
+        ],
+        "produto": [
+            {
+                "opeExe": "I",
+                "codPro": item["codpro"], "qtdPed": _fmt_numero(item["qtd"]), "preUni": _fmt_numero(item["preco"]),
+                "tnsPro": tns_pro, "resEst": "S",
+                "usuGer": str(usuario),
+            }
+            for item in itens
+        ],
     }
-    resposta = _chamar_gravar_pedidos([pedido], "incluir_item_pedido_loja", ignorar_pedido_bloqueado=True)
-    seqipd = _seqipd_da_resposta(resposta, codpro)
-    numped = _numped_da_resposta(resposta)
-    return seqipd, numped
+    client, history = _get_client()
+    try:
+        resposta = client.service.GravarPedidos_15(
+            user=PEDIDO_WS_USER, password=PEDIDO_WS_PASSWORD, encryption=0,
+            parameters={"pedido": [pedido], "ignorarPedidoBloqueado": "S"},
+        )
+    finally:
+        _log_envelopes(history, "incluir_itens_pedido_loja")
+
+    if (resposta.erroExecucao or "").strip().upper() == "S":
+        raise PedidoWebserviceError(resposta.mensagemRetorno or "Erro não especificado no GravarPedidos.")
+
+    respostas_pedido = resposta.respostaPedido or []
+    if not respostas_pedido:
+        raise PedidoWebserviceError("GravarPedidos não retornou o pedido gravado.")
+    resposta_pedido = respostas_pedido[0]
+    numped = getattr(resposta_pedido, "numPed", None)
+
+    grid_pro = getattr(resposta_pedido, "gridPro", None) or []
+    resultados = []
+    for indice, item in enumerate(itens):
+        linha = grid_pro[indice] if indice < len(grid_pro) else None
+        if linha is None:
+            resultados.append({"sucesso": False, "seqipd": None, "mensagem": "Sem retorno pra esse item."})
+            continue
+        retorno_item = str(getattr(linha, "retorno", "") or "").strip().upper()
+        if retorno_item not in ("", "S", "OK"):
+            resultados.append({"sucesso": False, "seqipd": None, "mensagem": getattr(linha, "retorno", None) or "Erro não especificado."})
+        else:
+            resultados.append({"sucesso": True, "seqipd": linha.seqIpd, "mensagem": None})
+    return numped, resultados
 
 
 # ---------------------------------------------------------------------
-# Solicitação de compra - webservice (GerarSolicitacaoCompra_3)
+# Webservice (GerarSolicitacaoCompra_3) - Solicitação de compra 
 # ---------------------------------------------------------------------
 COMPRA_WS_WSDL = os.environ.get("COMPRA_WS_WSDL", "")
 COMPRA_WS_USER = os.environ.get("COMPRA_WS_USER", "")
@@ -256,37 +266,58 @@ def _get_client_compra():
     client = zeep.Client(COMPRA_WS_WSDL, plugins=[history])
     return client, history
 
-def gerar_solicitacao_compra(codemp, numsol, cod_dep, codpro, cod_tns, dat_prv, fil_ped, num_ped, obs_sol, pre_sol, qtd_sol, usu_sol):
+def gerar_solicitacao_compra_lote(codemp, numsol_compra, itens, usu_sol):
+    """Grava uma única solicitação de compra (numsol_compra) com todos os
+    itens (lista de dicts {cod_dep, codpro, cod_tns, dat_prv, fil_ped,
+    num_ped, obs_sol, pre_sol, qtd_sol}) como linhas dela - antes cada item
+    virava uma solicitação de compra separada, um de cada vez.
+
+    Retorna um dict {seqSol: {sucesso, mensagem}} - seqSol é 1-based, na
+    mesma ordem em que os itens foram passados (o retornoSolicitacao do
+    webservice já vem com seqSol pra cada linha, então casamos por esse
+    campo em vez de por índice/ordem da resposta).
+    """
     client, history = _get_client_compra()
     try:
         resposta = client.service.GerarSolicitacaoCompra_3(
             user=COMPRA_WS_USER, password=COMPRA_WS_PASSWORD, encryption=0,
             parameters={
                 "codEmp": codemp,
-                "itensProduto": [{
-                    "codDep": cod_dep,
-                    "codPro": codpro,
-                    "codTns": cod_tns,
-                    "datPrv": dat_prv.strftime("%d/%m/%Y"),
-                    "filPed": fil_ped,
-                    "numPed": num_ped,
-                    "obsSol": obs_sol,
-                    "preSol": f"{float(pre_sol):.2f}" if pre_sol is not None else None,
-                    "qtdSol": f"{float(qtd_sol):.2f}",
-                    "seqIpd": 1,
-                    "seqSol": 1,
-                    "uniMed": "UN",
-                    "usuSol": usu_sol,
-                }],
-                "numSol": numsol,
+                "itensProduto": [
+                    {
+                        "codDep": item["cod_dep"],
+                        "codPro": item["codpro"],
+                        "codTns": item["cod_tns"],
+                        "datPrv": item["dat_prv"].strftime("%d/%m/%Y"),
+                        "filPed": item["fil_ped"],
+                        "numPed": item["num_ped"],
+                        "obsSol": item["obs_sol"],
+                        "preSol": f"{float(item['pre_sol']):.2f}" if item.get("pre_sol") is not None else None,
+                        "qtdSol": f"{float(item['qtd_sol']):.2f}",
+                        "seqIpd": seq,
+                        "seqSol": seq,
+                        "uniMed": "UN",
+                        "usuSol": usu_sol,
+                    }
+                    for seq, item in enumerate(itens, start=1)
+                ],
+                "numSol": numsol_compra,
             },
         )
     finally:
-        _log_envelopes(history, "gerar_solicitacao_compra")
+        _log_envelopes(history, "gerar_solicitacao_compra_lote")
 
     erro_execucao = getattr(resposta, "erroExecucao", None)
     if (erro_execucao or "").strip().upper() == "S":
         raise PedidoWebserviceError(
             getattr(resposta, "mensagemRetorno", None) or "Erro não especificado no GerarSolicitacaoCompra."
         )
-    return numsol
+
+    resultados = {}
+    for retorno in resposta.retornoSolicitacao or []:
+        tip_ret = getattr(retorno, "tipRet", None)
+        resultados[retorno.seqSol] = {
+            "sucesso": tip_ret is not None and int(tip_ret) == 1,
+            "mensagem": getattr(retorno, "msgRet", None) or "",
+        }
+    return resultados

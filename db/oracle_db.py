@@ -367,7 +367,7 @@ def get_solicitacao_cabecalho(codemp, codfil, numsol):
 def _saldos_por_deposito(cur, codemp, codpro1, codpro2):
     """
     Saldo por depósito de um produto - código "interno" varia conforme a
-    empresa (ver README, seÃ§Ã£o 1). Reaproveitado tanto pro item da
+    empresa (ver README, seção 1). Reaproveitado tanto pro item da
     solicitação quanto pros equivalentes (E075EQI).
     
     """

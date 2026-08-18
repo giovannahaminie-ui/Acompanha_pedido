@@ -248,7 +248,7 @@
       <col style="width:8%">
       <col style="width:6%">
       <col style="width:6%">
-      <col style="width:5%"><col style="width:4%"><col style="width:6%"><col style="width:5%"><col style="width:5%">
+      <col style="width:5%"><col style="width:4%"><col style="width:6%"><col style="width:5%"><col style="width:5%"><col style="width:5%">
       <col style="width:11%">
       <col style="width:9%">
     </colgroup>
@@ -262,7 +262,7 @@
         <th rowspan="2">Descrição (solicitação)</th>
         <th rowspan="2">Marca</th>
         <th rowspan="3">Endereço</th>
-        <th colspan="5" class="th-qtd-group" style="text-align:center;">Qtd.</th>
+        <th colspan="6" class="th-qtd-group" style="text-align:center;">Qtd.</th>
         <th rowspan="2">Saldo por depósito</th>
         <th rowspan="2">Ações</th>
       </tr>
@@ -272,6 +272,7 @@
         <th class="th-qtd" style="text-align:center;">Aberta</th>
         <th class="th-qtd" style="text-align:center;">Atend</th>
         <th class="th-qtd" style="text-align:center;">Mov</th>
+        <th class="th-qtd" style="text-align:center;">CPR</th>
       </tr>
     </thead>
     <tbody>
@@ -307,6 +308,7 @@
         <td style="text-align:center;">{{ item.qtd_aberta }}</td>
         <td style="text-align:center;">{{ item.qtd_atendida }}</td>
         <td style="text-align:center;">{{ item.qtd_movimentada }}</td>
+        <td style="text-align:center;">{{ item.qtd_mso }}</td>
         <td>
           {% if item.sitite in (3, 4, 6) %}
           <span class="badge badge-zero">—</span>

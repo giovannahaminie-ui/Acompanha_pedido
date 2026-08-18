@@ -469,8 +469,9 @@ def _dados_e_sugestao_loja(codemp, codfil, item):
 # ---------------------------------------------------------------------
 # Pedido na loja (RTL) em lote - a pessoa marca os itens direto na tabela
 # (checkbox) e um botão independente (fora da coluna Ações) abre esta tela
-# de revisão, com quantidade editável por item; só grava (GravarPedidos_15,
-# um pedido por item) quando confirma aqui.
+# de revisão, com quantidade editável por item; só grava quando confirma
+# aqui - um único pedido (GravarPedidos_15) com todos os itens marcados
+# como linhas dele, não um pedido por item.
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/pedido_loja", methods=["POST"])
 @login_obrigatorio
@@ -483,13 +484,15 @@ def pedido_loja_lote(codemp, codfil, numsol):
     itens_marcados = [i for i in detalhe["itens"] if i["seqite"] in seqites]
 
     if request.form.get("confirmar"):
-        resultados = []
-        for item in itens_marcados:
+        resultados = [None] * len(itens_marcados)
+        itens_validos = []  # [(indice, item, qtd, dados_loja)]
+
+        for indice, item in enumerate(itens_marcados):
             if not item["saldos"]:
-                resultados.append({
+                resultados[indice] = {
                     "item": item, "sucesso": False,
                     "mensagem": "Sem saldo em nenhum depósito - não é possível pedir na loja.",
-                })
+                }
                 continue
 
             try:
@@ -497,35 +500,47 @@ def pedido_loja_lote(codemp, codfil, numsol):
             except ValueError:
                 qtd = 0
             if qtd <= 0:
-                resultados.append({"item": item, "sucesso": False, "mensagem": "Quantidade inválida."})
+                resultados[indice] = {"item": item, "sucesso": False, "mensagem": "Quantidade inválida."}
                 continue
 
             dados_loja, _, qtdest_loja = _dados_e_sugestao_loja(codemp, codfil, item)
             if not dados_loja:
-                resultados.append({"item": item, "sucesso": False, "mensagem": "Sem regra de pedido de loja pra essa empresa/filial."})
+                resultados[indice] = {"item": item, "sucesso": False, "mensagem": "Sem regra de pedido de loja pra essa empresa/filial."}
                 continue
             if qtd > qtdest_loja:
-                resultados.append({"item": item, "sucesso": False, "mensagem": "Saldo na loja insuficiente para essa quantidade."})
+                resultados[indice] = {"item": item, "sucesso": False, "mensagem": "Saldo na loja insuficiente para essa quantidade."}
                 continue
 
             produto = oracle_db.buscar_produto_preco(dados_loja["codemp_loja"], dados_loja["codfil_loja"], None, item["codpro2"])
             if not produto:
-                resultados.append({"item": item, "sucesso": False, "mensagem": f"Produto {item['codpro2']} não encontrado na loja."})
+                resultados[indice] = {"item": item, "sucesso": False, "mensagem": f"Produto {item['codpro2']} não encontrado na loja."}
                 continue
 
+            itens_validos.append((indice, item, qtd, produto["preco"], dados_loja))
+
+        if itens_validos:
+            dados_loja = itens_validos[0][4]
             try:
-                _seqipd, numped = pedido_ws.incluir_item_pedido_loja(
+                numped, resultados_ws = pedido_ws.incluir_itens_pedido_loja(
                     dados_loja["codemp_loja"], dados_loja["codfil_loja"], dados_loja["codcli"],
-                    item["codpro2"], qtd, produto["preco"], tns_pro="90100",
-                    usuario=session["usuario"],
+                    [{"codpro": item["codpro2"], "qtd": qtd, "preco": preco} for _, item, qtd, preco, _ in itens_validos],
+                    tns_pro="90100", usuario=session["usuario"],
                 )
-                oracle_db.somar_qtd_mso_item(codemp, codfil, numsol, item["seqite"], qtd)
-                resultados.append({
-                    "item": item, "sucesso": True, "numped": numped,
-                    "mensagem": f"Pedido gerado com sucesso." if numped else "Pedido gerado com sucesso.",
-                })
+                for (indice, item, qtd, _preco, _dl), resultado_ws in zip(itens_validos, resultados_ws):
+                    if resultado_ws["sucesso"]:
+                        oracle_db.somar_qtd_mso_item(codemp, codfil, numsol, item["seqite"], qtd)
+                        resultados[indice] = {
+                            "item": item, "sucesso": True, "numped": numped,
+                            "mensagem": "Pedido gerado com sucesso.",
+                        }
+                    else:
+                        resultados[indice] = {
+                            "item": item, "sucesso": False,
+                            "mensagem": resultado_ws["mensagem"] or "Erro não especificado.",
+                        }
             except pedido_ws.PedidoWebserviceError as e:
-                resultados.append({"item": item, "sucesso": False, "mensagem": str(e)})
+                for indice, item, _qtd, _preco, _dl in itens_validos:
+                    resultados[indice] = {"item": item, "sucesso": False, "mensagem": str(e)}
 
         return render_template(
             "pedido_loja_lote.html", codemp=codemp, codfil=codfil, numsol=numsol,
@@ -546,10 +561,12 @@ def pedido_loja_lote(codemp, codfil, numsol):
 
 
 # ---------------------------------------------------------------------
-# Solicitação de compra em lote - mesmo padrão do pedido na loja acima.
+# Solicitação de compra em lote - mesmo padrão do pedido na loja acima:
+# uma única solicitação de compra (GerarSolicitacaoCompra_3) com todos os
+# itens marcados como linhas dela, não uma solicitação por item.
 # numPed do item de compra = numero da OS (item["numped"]), não o numsol_compra
-# recém-gerado. A gravação de verdade (GerarSolicitacaoCompra_3) segue com
-# filPed/codTns ainda a confirmar (ver conversa anterior).
+# recém-gerado. A gravação de verdade segue com filPed/codTns ainda a
+# confirmar (ver conversa anterior).
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/solicitacao_compra", methods=["POST"])
 @login_obrigatorio
@@ -562,38 +579,58 @@ def solicitacao_compra_lote(codemp, codfil, numsol):
     itens_marcados = [i for i in detalhe["itens"] if i["seqite"] in seqites]
 
     if request.form.get("confirmar"):
-        resultados = []
-        for item in itens_marcados:
+        resultados = [None] * len(itens_marcados)
+        itens_validos = []  # [(indice, item, qtd, cod_dep)]
+
+        for indice, item in enumerate(itens_marcados):
             try:
                 qtd = float(request.form.get(f"qtd_{item['seqite']}", "0").replace(",", "."))
             except ValueError:
                 qtd = 0
             if qtd <= 0:
-                resultados.append({"item": item, "sucesso": False, "mensagem": "Quantidade inválida."})
+                resultados[indice] = {"item": item, "sucesso": False, "mensagem": "Quantidade inválida."}
                 continue
 
             filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
             cod_dep = oracle_db.get_coddep_esperado(codemp, filexe)
             if not cod_dep:
-                resultados.append({"item": item, "sucesso": False, "mensagem": "Sem depósito ligado a essa empresa/filial."})
+                resultados[indice] = {"item": item, "sucesso": False, "mensagem": "Sem depósito ligado a essa empresa/filial."}
                 continue
 
+            itens_validos.append((indice, item, qtd, cod_dep))
+
+        if itens_validos:
             numsol_compra = oracle_db.proximo_numsol_compra(codemp)
             try:
-                pedido_ws.gerar_solicitacao_compra(
-                    codemp=codemp, numsol=numsol_compra, cod_dep=cod_dep, codpro=item["codpro1"],
-                    cod_tns="91400", dat_prv=datetime.now(), fil_ped=codfil, num_ped=item["numped"],
-                    obs_sol=f"Solicitação {numsol} item {item['seqite']}", pre_sol=None, qtd_sol=qtd,
+                resultados_ws = pedido_ws.gerar_solicitacao_compra_lote(
+                    codemp=codemp, numsol_compra=numsol_compra,
+                    itens=[
+                        {
+                            "cod_dep": cod_dep, "codpro": item["codpro1"], "cod_tns": "91400",
+                            "dat_prv": datetime.now(), "fil_ped": codfil, "num_ped": item["numped"],
+                            "obs_sol": f"Solicitação {numsol} item {item['seqite']}", "pre_sol": None, "qtd_sol": qtd,
+                        }
+                        for _, item, qtd, cod_dep in itens_validos
+                    ],
                     usu_sol=session["usuario"],
                 )
-                oracle_db.salvar_numsco_item(codemp, codfil, numsol, item["seqite"], numsol_compra)
-                oracle_db.somar_qtd_mso_item(codemp, codfil, numsol, item["seqite"], qtd)
-                resultados.append({
-                    "item": item, "sucesso": True, "numsol_compra": numsol_compra,
-                    "mensagem": f"Solicitação de compra {numsol_compra} gerada com sucesso.",
-                })
+                for seq, (indice, item, qtd, _cod_dep) in enumerate(itens_validos, start=1):
+                    resultado_ws = resultados_ws.get(seq)
+                    if resultado_ws and resultado_ws["sucesso"]:
+                        oracle_db.salvar_numsco_item(codemp, codfil, numsol, item["seqite"], numsol_compra)
+                        oracle_db.somar_qtd_mso_item(codemp, codfil, numsol, item["seqite"], qtd)
+                        resultados[indice] = {
+                            "item": item, "sucesso": True, "numsol_compra": numsol_compra,
+                            "mensagem": f"Solicitação de compra {numsol_compra} gerada com sucesso.",
+                        }
+                    else:
+                        resultados[indice] = {
+                            "item": item, "sucesso": False,
+                            "mensagem": (resultado_ws["mensagem"] if resultado_ws else None) or "Erro não especificado.",
+                        }
             except pedido_ws.PedidoWebserviceError as e:
-                resultados.append({"item": item, "sucesso": False, "mensagem": str(e)})
+                for indice, item, _qtd, _cod_dep in itens_validos:
+                    resultados[indice] = {"item": item, "sucesso": False, "mensagem": str(e)}
 
         return render_template(
             "solicitacao_compra_lote.html", codemp=codemp, codfil=codfil, numsol=numsol,
