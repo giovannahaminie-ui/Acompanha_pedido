@@ -6,7 +6,7 @@
   <title>{% block title %}Acompanha Pedido{% endblock %} — Retificadora Tiête</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body{% if perfil_logado == 'G' %} class="has-admin-toolbar"{% endif %}>
   <div class="bg-decor" aria-hidden="true"></div>
   {% if perfil_logado == 'G' %}
   <div class="admin-toolbar">
