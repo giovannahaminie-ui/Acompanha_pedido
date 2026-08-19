@@ -318,7 +318,6 @@ SQL_CLIENTE_PEDIDO = """
                 AND p.numped = :numped
 """
 
-
 def get_solicitacao_cabecalho(codemp, codfil, numsol):
     """
     Cabeçalho básico da solicitação (numped, solicitante, separador, etc) -

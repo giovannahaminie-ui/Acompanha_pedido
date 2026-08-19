@@ -211,7 +211,7 @@ def incluir_itens_pedido_loja(codemp_loja, codfil_loja, codcli, itens, tns_pro, 
                 "usuGer": str(usuario),
             }
             for item in itens
-        ],
+        ]
     }
     client, history = _get_client()
     try:

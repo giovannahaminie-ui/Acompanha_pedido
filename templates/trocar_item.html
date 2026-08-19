@@ -87,7 +87,7 @@
           <form method="POST">
             <div class="field">
               <label for="codpro_novo">Código do produto novo</label>
-              <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required autofocus>
+              <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required autofocus style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()">
             </div>
             <div class="field">
               <label for="qtd">Quantidade a trocar</label>

@@ -69,7 +69,14 @@
               </span>
               {% endif %}
             </label>
-            <input type="number" name="qtd_{{ item.seqite }}" step="any" min="0.01" style="width:6rem;" required>
+            <div style="display:flex; flex-direction:column; align-items:flex-end;">
+            <input type="number" id="qtd_{{ item.seqite }}" name="qtd_{{ item.seqite }}" step="any" min="0.01"
+                  max="{{ item.qtd_sugerida }}" style="width:6rem;" required
+                  oninput="validarQtdCompra(this, {{ item.qtd_sugerida }})">
+            <span id="aviso_{{ item.seqite }}" style="display:none; color:var(--st-separacao); font-size:0.72rem; font-weight:600; margin-top:0.2rem; text-align:right;">
+              Excede o saldo em aberto ({{ item.qtd_sugerida }})!
+            </span>
+          </div>
           </div>
           {% endfor %}
           <input type="hidden" name="confirmar" value="1">
@@ -82,4 +89,17 @@
     </div>
   </div>
 </div>
+<script>
+  function validarQtdCompra(input, maximo) {
+    const aviso = document.getElementById('aviso_' + input.id.replace('qtd_', ''));
+    const valor = parseFloat(input.value.replace(',', '.'));
+    if (valor > maximo) {
+      aviso.style.display = 'block';
+      input.setCustomValidity('Quantidade solicitada + já em MSO excede a quantidade em aberto do item.');
+    } else {
+      aviso.style.display = 'none';
+      input.setCustomValidity('');
+    }
+  }
+</script>
 {% endblock %}

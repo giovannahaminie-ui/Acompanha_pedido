@@ -110,9 +110,9 @@ vez de texto cru na célula. Ícones de ação numa `<div class="acoes-grid">`
   acima disso exige campo "quem autorizou".
 - **Histórico** — rota existe (`/item/<seqite>/historico`,
   `historico_item.html`: situação, quem/quando solicitou, vínculo com
-  pedido/solicitação de compra, quantidades, log de observações), mas
-  **sem atalho na tabela** (removido a pedido).
+  pedido/solicitação de compra, quantidades, log de observações)
 
+- ****
 ### 5.4 Administração de perfis (`/admin/perfis`)
 
 Só acessível a quem tem perfil `G`. Lista todos os usuários ativos do

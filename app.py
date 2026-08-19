@@ -361,7 +361,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
     autorizado_por = request.form.get("autorizado_por", "").strip()
 
     if request.method == "POST":
-        codpro_novo = request.form.get("codpro_novo", "").strip()
+        codpro_novo = request.form.get("codpro_novo", "").strip().upper()
         try:
             qtd = float(request.form.get("qtd", "0").replace(",", "."))
         except ValueError:
@@ -396,7 +396,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
         if mostrar_confirmacao and item_pedido and item_pedido["preco_unitario"] is not None:
             diferenca_preco = produto["preco"] - item_pedido["preco_unitario"]
             limite = abs(item_pedido["preco_unitario"]) * TOLERANCIA_PRECO_TROCA_PERCENTUAL
-            alerta_preco = abs(diferenca_preco) > limite
+            alerta_preco = diferenca_preco > limite
 
         if mostrar_confirmacao and request.form.get("confirmar") and alerta_preco and not autorizado_por:
             erro = "A diferença de preço passou da tolerância - informe quem autorizou a troca."
@@ -555,7 +555,7 @@ def pedido_loja_lote(codemp, codfil, numsol):
                         cod_for = oracle_db.get_codfor_filial(dados_loja["codemp_loja"], dados_loja["codfil_loja"])
                         if cod_for:
                             numocp, sucesso_oc, msg_oc = pedido_ws.gerar_ordem_compra(
-                                codemp=dados_loja["codemp_loja"], codfil=dados_loja["codfil_loja"],
+                                codemp=codemp, codfil=codfil,
                                 cod_for=cod_for,
                                 itens=[{"codpro": item["codpro2"], "qtd": qtd, "preco": preco}
                                        for _, item, qtd, preco, _ in itens_validos],
@@ -628,7 +628,12 @@ def solicitacao_compra_lote(codemp, codfil, numsol):
             if qtd <= 0:
                 resultados[indice] = {"item": item, "sucesso": False, "mensagem": "Quantidade inválida."}
                 continue
-
+            if qtd + item["qtd_mso"] > item["qtd_aberta"]:
+                resultados[indice] = {
+                    "item": item, "sucesso": False,
+                    "mensagem": f"Quantidade Solicitada ({qtd}) + já em MSO ({item['qtd_mso']}) excede a quantidade em aberto ({item['qtd_aberta']})."
+                }
+                continue
             filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
             cod_dep = oracle_db.get_coddep_esperado(codemp, filexe)
             if not cod_dep:
@@ -741,7 +746,6 @@ def historico_solicitacao(codemp, codfil, numsol):
         detalhe=detalhe
     )
 
-
 @app.route("/historico/geral")
 @login_obrigatorio
 def historico_geral():
@@ -750,7 +754,6 @@ def historico_geral():
         return redirect(url_for("painel"))
     acoes = local_db.listar_historico_geral(limite=200)
     return render_template("historico_geral.html", acoes=acoes)
-
 
 # ===== ÁREA ADMINISTRATIVA =====
 @app.route("/admin/perfis")
