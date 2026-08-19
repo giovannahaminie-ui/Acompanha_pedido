@@ -1210,11 +1210,12 @@ SQL_UPDATE_PEDIDO_OC = """
                     AND numped = :numped
 """
 
-def atualizar_pedido_com_oc(codemp, codfil, numped):
-    """Marca o pedido (E120PED) com observação de que a OC foi gerada."""
+def atualizar_pedido_com_oc(codemp, codfil, numped, numocp):
+    """Marca o pedido (E120PED) com o número da ordem de compra gerada."""
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(SQL_UPDATE_PEDIDO_OC, {"obs_oc": "Ordem de compra com estoque", "codemp": codemp, "codfil": codfil, "numped": numped})
+    obs_oc = f"Ordem de compra {numocp}"
+    cur.execute(SQL_UPDATE_PEDIDO_OC, {"obs_oc": obs_oc, "codemp": codemp, "codfil": codfil, "numped": numped})
     conn.commit()
     conn.close()
 

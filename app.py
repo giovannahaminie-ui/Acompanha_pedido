@@ -357,7 +357,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
     qtd = 0
     diferenca_preco = None
     alerta_preco = False
-    mostrar_confirmacao = False
+    mostrar_confirmacao = FalseF
     autorizado_por = request.form.get("autorizado_por", "").strip()
 
     if request.method == "POST":
@@ -557,12 +557,12 @@ def pedido_loja_lote(codemp, codfil, numsol):
                             numocp, sucesso_oc, msg_oc = pedido_ws.gerar_ordem_compra(
                                 codemp=codemp, codfil=codfil,
                                 cod_for=cod_for,
-                                itens=[{"codpro": item["codpro2"], "qtd": qtd, "preco": preco}
+                                    itens=[{"codpro": item["codpro1"], "qtd": qtd, "preco": preco}
                                        for _, item, qtd, preco, _ in itens_validos],
                                 numsol=numsol, numped=numped,
                             )
                             if sucesso_oc:
-                                oracle_db.atualizar_pedido_com_oc(dados_loja["codemp_loja"], dados_loja["codfil_loja"], numped)
+                                oracle_db.atualizar_pedido_com_oc(dados_loja["codemp_loja"], dados_loja["codfil_loja"], numped, numocp)
                                 oracle_db.atualizar_itens_solicitacao_com_oc(codemp, codfil, numsol, seqites_validos)
                                 local_db.registrar_acao(
                                     tipo_acao="oc_gerada",
