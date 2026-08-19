@@ -357,7 +357,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
     qtd = 0
     diferenca_preco = None
     alerta_preco = False
-    mostrar_confirmacao = FalseF
+    mostrar_confirmacao = False
     autorizado_por = request.form.get("autorizado_por", "").strip()
 
     if request.method == "POST":
@@ -555,7 +555,7 @@ def pedido_loja_lote(codemp, codfil, numsol):
                         cod_for = oracle_db.get_codfor_filial(dados_loja["codemp_loja"], dados_loja["codfil_loja"])
                         if cod_for:
                             numocp, sucesso_oc, msg_oc = pedido_ws.gerar_ordem_compra(
-                                codemp=codemp, codfil=codfil,
+                                codemp=dados_loja["EmpOcp"], codfil=dados_loja["FilOcp"], coddep = dados_loja["DepOcp"],
                                 cod_for=cod_for,
                                     itens=[{"codpro": item["codpro1"], "qtd": qtd, "preco": preco}
                                        for _, item, qtd, preco, _ in itens_validos],

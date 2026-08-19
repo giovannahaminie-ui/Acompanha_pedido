@@ -946,16 +946,23 @@ def dados_pedido_loja(codemp, filexe):
         #FilExe = P
         if filexe == "P":
             return {"codcli": 990110572, "codemp_loja": 2,
-                    "codfil_loja": 2, "coddep_loja": "2"}
-        #Filexe <> P
-        return {"codcli": 1, "codemp_loja": 2,
-                "codfil_loja": 1, "coddep_loja": "1"}
+                    "codfil_loja": 2, "coddep_loja": "2", "EmpOcp":"1", "FilOcp": "10", "DepOcp": "3"}
+        #Filexe = L
+        if filexe == "L":
+            return {"codcli": 1, "codemp_loja": 2,
+                "codfil_loja": 1, "coddep_loja": "1", "EmpOcp": 1, "FilOcp": 1,"DepOcp":"1"}
+        
+        #Filexe = C
+        if filexe == "C":
+            return {"codcli": 1, "codemp_loja": 2,
+                    "codfil_loja": 1, "coddep_loja": "1", "EmpOcp": 1, "FilOcp": 1,"DepOcp": "5"}
     #Empresa = 5
     if codemp == 5:
-        return {"codcli": 990108064, "codemp_loja": 2, "codfil_loja": 1, "coddep_loja": "1"}
+        return {"codcli": 990108064, "codemp_loja": 2, "codfil_loja": 1, "coddep_loja": "1", "EmpOcp": 5, "FilOcp": 1,"DepOcp":"1"}
+    
     #Empresa = 12
     if codemp == 12:
-        return {"codcli": 990143288, "codemp_loja": 2, "codfil_loja": 1, "coddep_loja": "1"}
+        return {"codcli": 990143288, "codemp_loja": 2, "codfil_loja": 1, "coddep_loja": "1","EmpOcp": 12, "FilOcp": 1,"DepOcp":"1"}
     return None
 
 def get_filial_pedido(codemp, codfil, numped):

@@ -184,7 +184,7 @@ def incluir_item_pedido(codemp, codfil, numped, codpro, qtd, preco, codtab, usua
 # Webservice (GravarPedido_15) - Pedido na loja (RTL)
 # ---------------------------------------------------------------------
 
-def incluir_itens_pedido_loja(codemp_loja, codfil_loja, codcli, itens, tns_pro, usuario):
+def incluir_itens_pedido_loja(codemp_loja, codfil_loja, codcli, itens, tns_pro, usuario, preuni):
     """Grava um único pedido novo com todos os itens (lista de dicts
     {codpro, qtd, preco}) como linhas desse mesmo pedido - antes cada item
     virava um pedido separado, um de cada vez.
@@ -209,6 +209,7 @@ def incluir_itens_pedido_loja(codemp_loja, codfil_loja, codcli, itens, tns_pro, 
                 "codPro": item["codpro"], "qtdPed": _fmt_numero(item["qtd"]), "preUni": _fmt_numero(item["preco"]),
                 "tnsPro": tns_pro, "resEst": "S",
                 "usuGer": str(usuario),
+                "preuni": preuni,
             }
             for item in itens
         ]
@@ -355,6 +356,7 @@ def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped):
                     "codEmp": codemp,
                     "codFil": codfil,
                     "codFor": cod_for,
+                    "coddep": coddep,
                     "tipoProcessamento": 1,
                     "tnsPro": "90403",
                     "obsOcp": f"Solicitação {numsol} - Pedido {numped}",
