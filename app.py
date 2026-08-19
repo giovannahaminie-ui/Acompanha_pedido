@@ -557,8 +557,14 @@ def pedido_loja_lote(codemp, codfil, numsol):
                             numocp, sucesso_oc, msg_oc = pedido_ws.gerar_ordem_compra(
                                 codemp=dados_loja["EmpOcp"], codfil=dados_loja["FilOcp"], coddep = dados_loja["DepOcp"],
                                 cod_for=cod_for,
-                                    itens=[{"codpro": item["codpro1"], "qtd": qtd, "preco": preco}
-                                       for _, item, qtd, preco, _ in itens_validos],
+                                    itens=[
+                                {
+                                    "codpro": item["codpro1"], 
+                                    "qtd": qtd, 
+                                    "preco": oracle_db.get_preco_item_pedido(dados_loja["codemp_loja"], dados_loja["codfil_loja"], numped, item["codpro1"]) or preco
+                                }
+                                for _, item, qtd, preco, _ in itens_validos
+                            ],
                                 numsol=numsol, numped=numped,
                             )
                             if sucesso_oc:

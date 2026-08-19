@@ -1206,6 +1206,29 @@ def get_codfor_filial(codemp, codfil):
     return row[0] if row else None
 
 # ---------------------------------------------------------------------
+# Ordem de Compra - Seleciona o preuni antes de gerar a Ordem de Compra
+# ---------------------------------------------------------------------
+
+SQL_PRECO_PEDIDO = """
+        
+        SELECT preuni FROM sapiens.E120IPD
+        WHERE codemp = :codemp
+        AND codfil = :codfil
+        AND codpro = :codpro
+        AND numped = :numped
+
+    """
+
+def get_preco_item_pedido(codemp, codfil, numped, codpro):
+    """Retorna o preço unitário do item no pedido (E120IPD)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_PRECO_PEDIDO, {"codemp": codemp, "codfil": codfil, "codpro": codpro, "numped": numped})
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+# ---------------------------------------------------------------------
 # Ordem de Compra - UPDATEs após sucesso
 # ---------------------------------------------------------------------
 
@@ -1221,7 +1244,7 @@ def atualizar_pedido_com_oc(codemp, codfil, numped, numocp):
     """Marca o pedido (E120PED) com o número da ordem de compra gerada."""
     conn = get_connection()
     cur = conn.cursor()
-    obs_oc = f"Ordem de compra {numocp}"
+    obs_oc = f"Ordem de compra: {numocp}"
     cur.execute(SQL_UPDATE_PEDIDO_OC, {"obs_oc": obs_oc, "codemp": codemp, "codfil": codfil, "numped": numped})
     conn.commit()
     conn.close()
