@@ -23,6 +23,9 @@
           </div>
         </div>
       </div>
+      <div class="header-right">
+        <span class="usuario-logado-chip">{{ nome_usuario_logado }}</span>
+      </div>
     </div>
 
     <!-- FILTROS (tipo de serviço / etapa) -->
@@ -73,6 +76,18 @@
                placeholder="Número da solicitação" value="{{ numsol_selecionado or '' }}">
       </div>
 
+      <div class="painel-filtro-campo" style="max-width:160px;">
+        <label for="data_inicio">Data início</label>
+        <input type="date" id="data_inicio" name="data_inicio" class="input-compact"
+               value="{{ data_inicio_selecionada or '' }}">
+      </div>
+
+      <div class="painel-filtro-campo" style="max-width:160px;">
+        <label for="data_fim">Data fim</label>
+        <input type="date" id="data_fim" name="data_fim" class="input-compact"
+               value="{{ data_fim_selecionada or '' }}">
+      </div>
+
       <div class="painel-filtro-campo" style="flex:none; align-self:flex-end;">
         <button type="submit" class="btn" title="Filtrar">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -82,8 +97,15 @@
     </form>
 
     <!-- ÁREA DAS COLUNAS -->
-    <div class="painel-grid">
+    {% if not mostrar_solicitado and not mostrar_separacao and not mostrar_atendido %}
+    <div class="empty-state" style="margin:2rem;">
+      <span class="empty-icon">!</span>
+      Seu usuário ainda não tem um perfil de acesso definido. Fale com a gerência.
+    </div>
+    {% else %}
+    <div class="painel-grid" style="grid-template-columns: repeat({{ num_colunas_visiveis }}, 1fr);">
 
+      {% if mostrar_solicitado %}
       <!-- COLUNA: SOLICITADO -->
       <div class="painel-col">
         <div class="col-header col-solicitado">
@@ -122,7 +144,9 @@
         </div>
         {% endif %}
       </div>
+      {% endif %}
 
+      {% if mostrar_separacao %}
       <!-- COLUNA: EM SEPARAÇÃO -->
       <div class="painel-col">
         <div class="col-header col-separacao">
@@ -162,7 +186,9 @@
         </div>
         {% endif %}
       </div>
+      {% endif %}
 
+      {% if mostrar_atendido %}
       <!-- COLUNA: ATENDIDO -->
       <div class="painel-col">
         <div class="col-header col-atendido">
@@ -182,7 +208,7 @@
             </thead>
             <tbody>
               {% for item in atendidos %}
-              <tr>
+              <tr class="linha-atendida" data-codemp="{{ item.codemp }}" data-codfil="{{ item.codfil }}" data-numsol="{{ item.numsol }}" ondblclick="abrirModalEntrega('{{ item.codemp }}', '{{ item.codfil }}', '{{ item.numsol }}')" style="cursor:pointer;" title="Duplo clique para retirar itens">
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
                 <td><span class="mono">{{ item.numped }}</span></td>
@@ -199,19 +225,80 @@
         </div>
         {% endif %}
       </div>
+      {% endif %}
 
     </div>
+    {% endif %}
+
+    <!-- MODAL DE ENTREGA -->
+    <div id="modal-entrega" class="modal-entrega" style="display:none;">
+      <div class="modal-entrega-content">
+        <div class="modal-entrega-header">
+          <h2>Entrega de itens</h2>
+          <button type="button" class="modal-entrega-close" onclick="fecharModalEntrega()">&times;</button>
+        </div>
+        <div id="items-entrega" style="max-height:400px; overflow-y:auto; margin:1rem 0;"></div>
+        <form id="form-entrega" method="POST" style="display:flex; gap:0.75rem;">
+          <button type="button" class="btn" onclick="fecharModalEntrega()" style="flex:1;">Cancelar</button>
+          <button type="submit" class="btn-primary" style="flex:1;">OK - Entregar</button>
+        </form>
+      </div>
+    </div>
+
+    <style>
+      .modal-entrega {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+      .modal-entrega-content {
+        background: white;
+        border-radius: 8px;
+        padding: 2rem;
+        max-width: 500px;
+        width: 90%;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .modal-entrega-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+      .modal-entrega-close {
+        background: none;
+        border: none;
+        font-size: 1.8rem;
+        cursor: pointer;
+        color: #6b7280;
+      }
+      .modal-entrega-close:hover {
+        color: #000;
+      }
+    </style>
+
   </div>
 </div>
 
 <script>
   // Relógio simples no cabeçalho
   function atualizarRelogio() {
-    const agora = new Date();
-    document.getElementById('relogio').textContent =
-      agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const relogio = document.getElementById('relogio');
+    if (relogio) {
+      const agora = new Date();
+      relogio.textContent = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
   }
-  setInterval(atualizarRelogio, 30000);
+  if (document.getElementById('relogio')) {
+    setInterval(atualizarRelogio, 30000);
+  }
 
   function assumirSolicitacao(codemp, codfil, numsol) {
     const url = `/solicitacao/assumir/${codemp}/${codfil}/${numsol}`;
@@ -248,6 +335,84 @@
     document.addEventListener('click', () => {
       wrappers.forEach(wrapper => wrapper.classList.remove('open'));
     });
+  });
+
+  // Modal de Entrega
+  function abrirModalEntrega(codemp, codfil, numsol) {
+    const modal = document.getElementById('modal-entrega');
+    const itemsDiv = document.getElementById('items-entrega');
+    const form = document.getElementById('form-entrega');
+
+    // Carregar itens da solicitação via fetch
+    fetch(`/api/solicitacao/${codemp}/${codfil}/${numsol}/itens-entrega`)
+      .then(response => response.json())
+      .then(data => {
+        console.log('Dados retornados da API:', data);
+        if (data.itens && data.itens.length > 0) {
+          itemsDiv.innerHTML = '';
+          data.itens.forEach(item => {
+            const qtd_entregar = item.qtd_aberta - item.qtd_movi;
+            if (qtd_entregar > 0) {
+              const itemHTML = `
+                <div style="padding:0.75rem; border:1px solid #e5e7eb; border-radius:4px; margin-bottom:0.5rem;">
+                  <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                    <input type="checkbox" name="seqites" value="${item.seqite}" checked>
+                    <div style="flex:1;">
+                      <strong>${item.codpro2}</strong><br>
+                      <small>${item.descricao}</small><br>
+                      <small style="color:#666;">A entregar: ${qtd_entregar}</small>
+                    </div>
+                  </label>
+                </div>
+              `;
+              itemsDiv.innerHTML += itemHTML;
+            }
+          });
+
+          form.action = `/solicitacao/${codemp}/${codfil}/${numsol}/entrega`;
+          form.method = 'POST';
+
+          modal.style.display = 'flex';
+        } else {
+          alert('Nenhum item disponível para entrega nesta solicitação.');
+        }
+      })
+      .catch(error => {
+        console.error('Erro ao carregar itens:', error);
+        alert('Erro ao carregar itens.');
+      });
+  }
+
+  function fecharModalEntrega() {
+    document.getElementById('modal-entrega').style.display = 'none';
+  }
+
+  // Destacar linhas "Atendido" que têm itens disponíveis (uma por vez, para não estourar conexões)
+  document.addEventListener('DOMContentLoaded', function () {
+    const linhas = Array.from(document.querySelectorAll('.linha-atendida'));
+
+    function verificarLinha(index) {
+      if (index >= linhas.length) return;
+      const linha = linhas[index];
+      const codemp = linha.dataset.codemp;
+      const codfil = linha.dataset.codfil;
+      const numsol = linha.dataset.numsol;
+
+      fetch(`/api/solicitacao/${codemp}/${codfil}/${numsol}/itens-entrega`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.itens && data.itens.length > 0) {
+            const temDisponivel = data.itens.some(item => (item.qtd_aberta - item.qtd_movi) > 0);
+            if (temDisponivel) {
+              linha.style.backgroundColor = '#dcfce7';
+            }
+          }
+        })
+        .catch(error => console.error('Erro ao verificar disponibilidade:', error))
+        .finally(() => verificarLinha(index + 1));
+    }
+
+    verificarLinha(0);
   });
 </script>
 {% endblock %}

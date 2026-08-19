@@ -10,6 +10,7 @@ Apenas a lógica de níveis de acesso (perfil) é local, para não depender do S
 """
 
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "acompanha_pedido.sqlite3"
@@ -127,10 +128,10 @@ def registrar_acao(tipo_acao: str, usuario: str, codemp: int = None, codfil: int
     conn = get_conn()
     conn.execute(
         """
-        INSERT INTO historico_acoes (tipo_acao, codemp, codfil, numsol, numped, numocp, usuario, detalhes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO historico_acoes (tipo_acao, codemp, codfil, numsol, numped, numocp, usuario, data_hora, detalhes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (tipo_acao, codemp, codfil, numsol, numped, numocp, usuario, detalhes),
+        (tipo_acao, codemp, codfil, numsol, numped, numocp, usuario, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), detalhes),
     )
     conn.commit()
     conn.close()

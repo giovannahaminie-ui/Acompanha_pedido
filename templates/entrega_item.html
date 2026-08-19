@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Entrega de itens{% endblock %}
+{% block content %}
+<div class="hero-screen">
+  <div class="hero-inner" style="grid-template-columns: 1fr;">
+    <div class="auth-card" style="max-width:720px;">
+      <div class="card-brand">RT</div>
+      <p class="card-title">Entrega de itens</p>
+      <p class="card-subtitle">Solicitação {{ numsol }} — O.S. {{ detalhe.numped }}</p>
+
+      {% if erro %}
+        <div class="alert">{{ erro }}</div>
+      {% endif %}
+
+      {% if itens %}
+        <form method="POST">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--st-separacao);">
+                <th style="text-align:left; padding:0.5rem;"><input type="checkbox" id="checkall" onchange="document.querySelectorAll('.item-check').forEach(c => c.checked = this.checked)"></th>
+                <th style="text-align:left; padding:0.5rem;">Código</th>
+                <th style="text-align:left; padding:0.5rem;">Descrição</th>
+                <th style="text-align:right; padding:0.5rem;">A Entregar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in itens %}
+              <tr style="border-bottom:1px solid var(--st-separacao);">
+                <td style="text-align:center; padding:0.5rem;"><input type="checkbox" name="seqites" value="{{ item.seqite }}" class="item-check"></td>
+                <td style="padding:0.5rem;">{{ item.codpro2 }}</td>
+                <td style="padding:0.5rem;">{{ item.descricao }}</td>
+                <td style="text-align:right; padding:0.5rem;"><strong>{{ item.qtd_aberta - item.qtd_movimentada }}</strong></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+          <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+            <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">Cancelar</a>
+            <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">Confirmar Entrega</button>
+          </div>
+        </form>
+      {% else %}
+        <div class="alert">Nenhum item disponível para entrega.</div>
+        <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn-primary" style="display:flex; justify-content:center;">Voltar</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -11,51 +11,7 @@
       </p>
 
       {% if resultados %}
-        {% for r in resultados %}
-        <div class="alert{{ ' alert-sucesso' if r.sucesso else '' }}">
-          <strong>{{ r.item.codpro2 }} — {{ r.item.descricao }}</strong><br>
-          {{ r.mensagem }}
-          {% if r.sucesso and r.numsol_compra %}
-          <div style="display:flex; align-items:center; justify-content:center; gap:0.5rem; margin-top:0.6rem;">
-            <input type="text" value="{{ r.numsol_compra }}" readonly
-                   style="width:auto; max-width:8rem; text-align:center; font-family:var(--font-mono); font-weight:700; padding:0.4rem 0.6rem;">
-            <button type="button" class="btn btn-icone btn-copiar-numsol" data-copiar="{{ r.numsol_compra }}" title="Copiar número da solicitação de compra">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-              Copiar
-            </button>
-          </div>
-          {% endif %}
-        </div>
-        {% endfor %}
-        <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn-primary" style="display:flex; justify-content:center; margin-top:0.75rem;">
-          Voltar pra solicitação
-        </a>
-        <script>
-          document.querySelectorAll('.btn-copiar-numsol').forEach(function (botao) {
-            botao.addEventListener('click', function () {
-              const texto = botao.dataset.copiar;
-              const original = botao.innerHTML;
-              function marcarCopiado() {
-                botao.textContent = 'Copiado!';
-                setTimeout(function () { botao.innerHTML = original; }, 1500);
-              }
-              if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(texto).then(marcarCopiado);
-              } else {
-                const campo = document.createElement('textarea');
-                campo.value = texto;
-                campo.style.position = 'fixed';
-                campo.style.opacity = '0';
-                document.body.appendChild(campo);
-                campo.focus();
-                campo.select();
-                document.execCommand('copy');
-                document.body.removeChild(campo);
-                marcarCopiado();
-              }
-            });
-          });
-        </script>
+        <p style="text-align:center; color:#666; padding:2rem 0;">Solicitação processada — veja o resumo.</p>
       {% else %}
         <form method="POST" action="{{ url_for('solicitacao_compra_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}">
           {% for item in itens %}
@@ -64,9 +20,9 @@
             <label style="flex:1; margin:0;">
               {{ item.codpro2 }} — {{ item.descricao }}
               {% if item.alerta_saldo_grupo %}
-              <span style="display:block; color:var(--st-separacao); font-weight:600; font-size:0.78rem;">
-                O produto possui saldo no grupo!
-              </span>
+            <span style="display:block; color:#dc2626; font-weight:600; font-size: 1.0rem; text-align:center;">
+              O PRODUTO POSSUI SALDO NO GRUPO!
+          </span>
               {% endif %}
             </label>
             <div style="display:flex; flex-direction:column; align-items:flex-end;">
@@ -102,4 +58,52 @@
     }
   }
 </script>
+
+{% if resultados %}
+<div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+  <div style="background: white; border-radius: 8px; padding: 2rem; max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <h2 style="margin-top: 0; color: #1f2937;">Solicitação de compra gerada</h2>
+
+    <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; padding: 1rem; margin-bottom: 1.5rem;">
+      <div style="text-align: center;">
+        <p style="font-size: 0.9rem; color: #666; margin: 0 0 0.5rem 0;">Número da solicitação</p>
+        <p style="font-size: 2rem; font-weight: 700; font-family: monospace; color: #059669; margin: 0;">
+          {% for r in resultados %}
+            {% if r.sucesso and r.numsol_compra %}{{ r.numsol_compra }}{% endif %}
+          {% endfor %}
+        </p>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+      <div style="padding: 1rem; background: #f9fafb; border-radius: 4px;">
+        <p style="font-size: 0.85rem; color: #666; margin: 0 0 0.5rem 0;">Solicitação origem</p>
+        <p style="font-size: 1.2rem; font-weight: 600; margin: 0;">{{ numsol }}</p>
+      </div>
+      <div style="padding: 1rem; background: #f9fafb; border-radius: 4px;">
+        <p style="font-size: 0.85rem; color: #666; margin: 0 0 0.5rem 0;">Itens processados</p>
+        <p style="font-size: 1.2rem; font-weight: 600; margin: 0;">
+          {% set sucessos = resultados|selectattr('sucesso')|list %}
+          {{ sucessos|length }}
+        </p>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 1.5rem;">
+      {% for r in resultados %}
+      <div style="padding: 0.75rem; border-left: 3px solid {{ '#22c55e' if r.sucesso else '#ef4444' }}; background: {{ '#f0fdf4' if r.sucesso else '#fef2f2' }}; margin-bottom: 0.5rem; border-radius: 2px;">
+        <p style="margin: 0 0 0.25rem 0; font-weight: 600; font-size: 0.9rem;">{{ r.item.codpro2 }} — {{ r.item.descricao }}</p>
+        <p style="margin: 0; font-size: 0.85rem; color: #666;">{{ r.mensagem }}</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div style="display: flex; gap: 0.75rem;">
+      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" style="flex: 1; padding: 0.75rem; text-align: center; background: #e5e7eb; color: #1f2937; text-decoration: none; border-radius: 4px; font-weight: 600;">
+        Voltar pra solicitação
+      </a>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

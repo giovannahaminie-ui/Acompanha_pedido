@@ -148,7 +148,7 @@ def get_etapas():
     conn.close()
     return etapas
 
-def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None, numped=None, numsol=None):
+def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None, numped=None, numsol=None, data_inicio=None, data_fim=None):
     """
     Retorna as solicitação já separadas por etapa (solicitado / em
     separação / atendido), prontas para o painel.
@@ -176,6 +176,12 @@ def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None, n
     if numsol:
         sql += " and s.usu_numsol = :numsol"
         binds["numsol"] = int(numsol)
+    if data_inicio:
+        sql += " and s.usu_datsol >= TO_DATE(:data_inicio, 'YYYY-MM-DD')"
+        binds["data_inicio"] = data_inicio
+    if data_fim:
+        sql += " and s.usu_datsol <= TO_DATE(:data_fim, 'YYYY-MM-DD')"
+        binds["data_fim"] = data_fim
 
     sql += " ORDER BY s.usu_datsol"
 
@@ -1270,5 +1276,100 @@ def atualizar_itens_solicitacao_com_oc(codemp, codfil, numsol, seqites):
     for i, seqite in enumerate(seqites):
         params[str(i)] = seqite
     cur.execute(sql, params)
+    conn.commit()
+    conn.close()
+
+# ---------------------------------------------------------------------
+# Transferencia de poduto - UPDATEs após sucesso
+# ---------------------------------------------------------------------
+
+SQL_ATUALIZAR_MVP = """
+
+            UPDATE sapiens.E210MVP SET 
+            usures=:usuario, 
+            filped=:filped, 
+            numped=:numped, 
+            seqipd=:seqipd 
+            WHERE codemp=:codemp 
+            AND codpro=:codpro 
+            AND datmov=:datmovws 
+            AND numdoc=:numped 
+            AND coddep IN (:depsai,:depent)
+
+"""
+
+def atualizar_mvp(codemp, codpro, numped, seqipd, usuario, datmovws):
+    "PRIMEIRO UPDATE realizado após transferência de produtos"
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_ATUALIZAR_MVP, {
+            "usuario": usuario, 
+            "filped": 1,  
+            "numped": numped, 
+            "seqipd": seqipd, 
+            "codemp": codemp, 
+            "codpro": codpro, 
+            "datmovws": datmovws,
+            "depsai": "1",  
+            "depent": "2"   
+        })
+    conn.commit()
+    conn.close()
+
+
+SQL_ATUALIZAR_IPD = """
+                UPDATE E120ipd SET usu_qtdmov = usu_qtdmov + :qtd
+                WHERE codemp=:codemp 
+                AND codfil=:filped 
+                AND numped=:numped 
+                AND seqipd=:seqipd
+
+"""
+
+def atualizar_ipd(codemp, filped, numped, seqipd, qtd):
+    "SEGUNDO UPDATE realizado pós a transferência de produto"
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_ATUALIZAR_IPD, {"qtd": qtd, "codemp": codemp, "filped": filped, "numped": numped, "seqipd": seqipd})
+    conn.commit()
+    conn.close()
+
+SQL_ATUALIZAR_SIT = """
+                UPDATE usu_T120SIT SET 
+                    usu_qtdmov = usu_qtdmov + :qtd, 
+                    usu_usuent=:usuent, 
+                    usu_datent=:datmovws, 
+                    usu_horent=:horent 
+                    WHERE usu_codemp=:empsol 
+                    AND usu_codfil=:filsol 
+                    AND usu_numsol=:numsol 
+                    AND usu_seqite=:seqite
+
+"""
+
+def atualizar_entrega_e120sit(codemp, codfil, numsol, seqite, qtd, usuario, datmovws):
+    """UPDATE USU_T120SIT após entrega."""
+    conn = get_connection()
+    cur = conn.cursor()
+    hora = datetime.now().strftime("%H:%M:%S")
+    
+    SQL = """
+        UPDATE sapiens.USU_T120SIT SET 
+            usu_qtdmov = usu_qtdmov + :qtd, 
+            usu_usuent = :usuario, 
+            usu_datent = :datent, 
+            usu_horent = :horent 
+        WHERE usu_codemp = :codemp 
+        AND usu_codfil = :codfil 
+        AND usu_numsol = :numsol 
+        AND usu_seqite = :seqite
+    """
+    
+    cur.execute(SQL, {
+        "qtd": qtd, "usuario": usuario, "datent": datmovws, "horent": hora,
+        "codemp": codemp, "codfil": codfil, "numsol": numsol, "seqite": seqite
+    })
     conn.commit()
     conn.close()

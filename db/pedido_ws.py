@@ -184,7 +184,7 @@ def incluir_item_pedido(codemp, codfil, numped, codpro, qtd, preco, codtab, usua
 # Webservice (GravarPedido_15) - Pedido na loja (RTL)
 # ---------------------------------------------------------------------
 
-def incluir_itens_pedido_loja(codemp_loja, codfil_loja, codcli, itens, tns_pro, usuario, preuni):
+def incluir_itens_pedido_loja(codemp_loja, codfil_loja, codcli, itens, tns_pro, usuario):
     """Grava um único pedido novo com todos os itens (lista de dicts
     {codpro, qtd, preco}) como linhas desse mesmo pedido - antes cada item
     virava um pedido separado, um de cada vez.
@@ -209,7 +209,6 @@ def incluir_itens_pedido_loja(codemp_loja, codfil_loja, codcli, itens, tns_pro, 
                 "codPro": item["codpro"], "qtdPed": _fmt_numero(item["qtd"]), "preUni": _fmt_numero(item["preco"]),
                 "tnsPro": tns_pro, "resEst": "S",
                 "usuGer": str(usuario),
-                "preuni": preuni,
             }
             for item in itens
         ]
@@ -356,7 +355,6 @@ def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped, coddep=No
                     "codEmp": codemp,
                     "codFil": codfil,
                     "codFor": cod_for,
-                    "coddep": coddep,
                     "tipoProcessamento": 1,
                     "tnsPro": "90403",
                     "obsOcp": f"Solicitação {numsol} - Pedido {numped}",
@@ -366,6 +364,7 @@ def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped, coddep=No
                             "qtdPed": item["qtd"],
                             "preUni": item["preco"],
                             "uniMed": "UN",
+                            "codDep": coddep,
                         }
                         for item in itens
                     ],
@@ -388,3 +387,88 @@ def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped, coddep=No
     tip_ret = getattr(retorno, "tipRet", None)
     sucesso = tip_ret is not None and int(tip_ret) == 1
     return retorno.numOcp, sucesso, (getattr(retorno, "retorno", None) or "")
+
+# ---------------------------------------------------------------------
+# Estoque (Tranferencia_produto) - Webservice que movimenta o estoque
+# ---------------------------------------------------------------------
+
+ESTOQUE_WS_WSDL = os.environ.get("ESTOQUE_WS_WSDL", "")
+ESTOQUE_WS_USER = os.environ.get("ESTOQUE_WS_USER", "")
+ESTOQUE_WS_PASSWORD = os.environ.get("ESTOQUE_WS_PASSWORD", "")
+
+def _get_client_estoque():
+    """Cliente SOAP para webservice de estoque."""
+    from zeep.plugins import HistoryPlugin
+    
+    if not (ESTOQUE_WS_WSDL and ESTOQUE_WS_USER and ESTOQUE_WS_PASSWORD):
+        raise PedidoWebserviceError(
+            "Webservice de estoque não configurado - faltam ESTOQUE_WS_WSDL/"
+            "ESTOQUE_WS_USER/ESTOQUE_WS_PASSWORD no .env."
+        )
+    
+    import zeep
+    history = HistoryPlugin()
+    client = zeep.Client(ESTOQUE_WS_WSDL, plugins=[history])
+    return client, history
+
+def transferencia_produtos(itens, codemp, codfil, numped, usuario):
+    """Transferência de estoque via webservice TransferenciaProdutos."""
+    if not (ESTOQUE_WS_WSDL and ESTOQUE_WS_USER and ESTOQUE_WS_PASSWORD):
+        raise PedidoWebserviceError(
+            "Credenciais de estoque não configuradas. Verifique "
+            "ESTOQUE_WS_WSDL/ESTOQUE_WS_USER/ESTOQUE_WS_PASSWORD no .env."
+        )
+    
+    client, history = _get_client_estoque()
+    
+    try:
+        # Montar saída e entrada de todos os itens
+        saidas = []
+        entradas = []
+        
+        for item in itens:
+            qtd = float(item["qtd_aberta"]) - float(item["qtd_movimentada"])
+            vlr = (item.get("preco_unitario") or 0) * qtd
+            
+            saidas.append({
+                "codDep": "1",  # depósito de origem
+                "codDer": "",
+                "codEmp": codemp,
+                "codFil": codfil,
+                "codPro": item["codpro1"],
+                "codTns": "90253",
+                "qtdMov": qtd,
+                "VlrMov": vlr,
+                "numDoc": numped,
+            })
+            entradas.append({
+                "codDep": "2",  # depósito de destino
+                "codDer": "",
+                "codPro": item["codpro1"],
+                "qtdMov": qtd,
+                "Vlrmov": vlr,
+                "Numdoc": numped,
+            })
+        
+        resposta = client.service.TransferenciaProdutos(
+            user=ESTOQUE_WS_USER,
+            password=ESTOQUE_WS_PASSWORD,
+            encryption=0,
+            parameters={
+                "transferenciaEntreProdutosSaida": saidas,
+                "transferenciasEntreProdutosEntrada": entradas,
+            },
+        )
+        
+        # Extrair data da resposta
+        datmovws = getattr(resposta, "datMov", datetime.now().strftime("%d/%m/%Y"))
+        sucesso = getattr(resposta, "sucesso", False)
+        
+        return sucesso, datmovws
+    
+    except Exception as e:
+        raise PedidoWebserviceError(f"Erro transferência: {str(e)}")
+    finally:
+        _log_envelopes(history, "transferencia_produtos")
+
+

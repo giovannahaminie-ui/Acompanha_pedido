@@ -50,9 +50,10 @@ def perfil_atual():
 
 @app.context_processor
 def injetar_perfil():
-    """Deixa o perfil do usuário logado disponível em qualquer template,
-    pra mostrar (ou não) o atalho de administração no menu."""
-    return {"perfil_logado": perfil_atual()}
+    """Deixa o perfil e o nome do usuário logado disponíveis em qualquer
+    template, pra mostrar (ou não) o atalho de administração no menu e
+    exibir quem está logado."""
+    return {"perfil_logado": perfil_atual(), "nome_usuario_logado": session.get("nome")}
 
 # ---------------------------------------------------------------------
 # Autenticação / Tela de Login por CodUsuario (usuário do Sapiens)
@@ -106,9 +107,12 @@ def painel():
     etapa = request.args.get("etapa") or None
     numped = request.args.get("numped") or None
     numsol = request.args.get("numsol") or None
+    data_inicio = request.args.get("data_inicio") or None
+    data_fim = request.args.get("data_fim") or None
     dados = oracle_db.get_solicitacoes(
         empresa=filtro.get("empresa"), filial=filtro.get("filial"),
         tipo_servico=tipo_servico, etapa=etapa, numped=numped, numsol=numsol,
+        data_inicio=data_inicio, data_fim=data_fim,
     )
 
     nome_empresa = dict(EMPRESAS).get(int(filtro["empresa"]), "")
@@ -120,16 +124,29 @@ def painel():
     tipo_servico_nome = next((nome for cod, nome in tipos_servico if str(cod) == tipo_servico), None)
     etapa_nome = next((nome for cod, nome in etapas if str(cod) == etapa), None)
 
+    # Colunas visíveis por perfil: Gerência vê tudo; Boqueta vê Solicitado
+    # e Em separação; Usinagem vê só Atendido/Parcial.
+    perfil = perfil_atual()
+    mostrar_solicitado = perfil in ("G", "B")
+    mostrar_separacao = perfil in ("G", "B")
+    mostrar_atendido = perfil in ("G", "U")
+    num_colunas_visiveis = sum([mostrar_solicitado, mostrar_separacao, mostrar_atendido]) or 1
+
     return render_template(
         "painel.html",
         contexto=contexto,
         solicitados=dados["solicitados"],
         em_separacao=dados["em_separacao"],
         atendidos=dados["atendidos"],
+        mostrar_solicitado=mostrar_solicitado,
+        mostrar_separacao=mostrar_separacao,
+        mostrar_atendido=mostrar_atendido,
+        num_colunas_visiveis=num_colunas_visiveis,
         tipos_servico=tipos_servico, etapas=etapas,
         tipo_servico_selecionado=tipo_servico, etapa_selecionada=etapa,
         tipo_servico_nome=tipo_servico_nome, etapa_nome=etapa_nome,
         numped_selecionado=numped, numsol_selecionado=numsol,
+        data_inicio_selecionada=data_inicio, data_fim_selecionada=data_fim,
         data_hoje=datetime.now().strftime("%d/%m/%Y"),
         hora_agora=datetime.now().strftime("%H:%M"),
     )
@@ -784,6 +801,105 @@ def salvar_perfil():
 @app.route("/")
 def index():
     return redirect(url_for("painel") if "usuario" in session else url_for("login"))
+
+@app.route("/api/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/itens-entrega")
+@login_obrigatorio
+def api_itens_entrega(codemp, codfil, numsol):
+    """Retorna JSON com itens disponíveis para entrega."""
+    from flask import jsonify
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+
+    if not detalhe:
+        return jsonify({"error": "Solicitação não encontrada"}), 404
+
+    itens_entrega = []
+    for i in detalhe["itens"]:
+        qtd_aberta = float(str(i["qtd_aberta"]).replace(",", "."))
+        qtd_movi = float(str(i["qtd_movimentada"]).replace(",", "."))
+
+        if (qtd_aberta - qtd_movi) > 0:
+            itens_entrega.append({
+                "seqite": i["seqite"],
+                "codpro2": i["codpro2"],
+                "codpro1": i["codpro1"],
+                "descricao": i["descricao"],
+                "qtd_aberta": qtd_aberta,
+                "qtd_movi": qtd_movi,
+                "seqipd": i["seqipd"]
+            })
+
+    return jsonify({"itens": itens_entrega})
+
+
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/entrega", methods=["GET", "POST"])
+@login_obrigatorio
+def entrega_item(codemp, codfil, numsol):
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    
+    # Filtra apenas itens com saldo a entregar
+    itens_entrega = [
+        i for i in detalhe["itens"]
+        if (float(i["qtd_aberta"]) - float(i["qtd_movimentada"])) > 0
+    ]
+    
+    if request.method == "POST":
+        seqites = [int(s) for s in request.form.getlist("seqites")]
+        itens_selecionados = [i for i in itens_entrega if i["seqite"] in seqites]
+        
+        if itens_selecionados:
+            try:
+                # Chamar webservice com todos os itens de uma vez
+                sucesso, datmovws = pedido_ws.transferencia_produtos(
+                    itens=itens_selecionados,
+                    codemp=codemp,
+                    codfil=codfil,
+                    numped=detalhe["numped"],
+                    usuario=session["usuario"],
+                )
+                
+                if sucesso:
+                    # Atualizar item a item no banco de dados
+                    for item in itens_selecionados:
+                        qtd_entrega = float(item["qtd_aberta"]) - float(item["qtd_movimentada"])
+                        
+                        oracle_db.atualizar_mvp(
+                            codemp=codemp, codpro=item["codpro1"], 
+                            numped=detalhe["numped"], seqipd=item["seqipd"],
+                            usuario=session["usuario"], datmovws=datmovws
+                        )
+                        oracle_db.atualizar_ipd(
+                            codemp=codemp, filped=codfil, numped=detalhe["numped"],
+                            seqipd=item["seqipd"], qtd=qtd_entrega
+                        )
+                        oracle_db.atualizar_entrega_e120sit(
+                            codemp=codemp, codfil=codfil, numsol=numsol,
+                            seqite=item["seqite"], qtd=qtd_entrega,
+                            usuario=session["usuario"], datmovws=datmovws
+                        )
+                        
+                    local_db.registrar_acao(
+                        tipo_acao="entrega_realizada",
+                        usuario=session["usuario"],
+                        codemp=codemp, codfil=codfil, numsol=numsol,
+                        detalhes=f"Entrega de {len(itens_selecionados)} item(ns)"
+                    )
+                    return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+                else:
+                    erro = "Falha na transferência de estoque"
+            except Exception as e:
+                erro = str(e)
+        else:
+            erro = "Nenhum item selecionado"
+        
+        return render_template(
+            "entrega_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
+            itens=itens_entrega, erro=erro, detalhe=detalhe
+        )
+    
+    return render_template(
+        "entrega_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
+        itens=itens_entrega, detalhe=detalhe
+    )
 
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0", port=5051)
