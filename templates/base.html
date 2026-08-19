@@ -6,21 +6,27 @@
   <title>{% block title %}Acompanha Pedido{% endblock %} — Retificadora Tiête</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body{% if perfil_logado == 'G' %} class="has-admin-toolbar"{% endif %}>
-  <div class="bg-decor" aria-hidden="true"></div>
-  {% if perfil_logado == 'G' %}
-  <div class="admin-toolbar">
+<body{% if nome_usuario_logado %} class="has-top-toolbar"{% endif %}>
+  <div class="bg-decor" width="10" height="14" aria-hidden="true"></div>
+  {% if nome_usuario_logado %}
+  <div class="top-toolbar">
+    <div class="usuario-logado-chip">
+      <span class="usuario-avatar">{{ nome_usuario_logado[0]|upper }}</span>
+      <span class="usuario-nome">{{ nome_usuario_logado }}</span>
+    </div>
+    {% if perfil_logado == 'G' %}
     <div class="admin-dropdown">
       <button type="button" class="admin-shortcut admin-dropdown-trigger" title="Administração">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         Administração
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
       </button>
       <div class="admin-dropdown-menu">
         <a href="{{ url_for('admin_perfis') }}">Usuários e perfis</a>
         <a href="{{ url_for('historico_geral') }}">Histórico geral</a>
       </div>
     </div>
+    {% endif %}
   </div>
   {% endif %}
   <div class="container">
