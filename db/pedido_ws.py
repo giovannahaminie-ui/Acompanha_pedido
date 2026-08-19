@@ -342,7 +342,7 @@ def _get_client_oc():
     client = zeep.Client(OC_WS_WSDL, plugins=[history])
     return client, history
 
-def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped):
+def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped, coddep):
     """itens: lista de dicts {codpro, qtd, preco}.
     Retorna (numocp, sucesso, mensagem)."""
     client, history = _get_client_oc()
