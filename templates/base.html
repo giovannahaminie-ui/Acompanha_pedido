@@ -6,9 +6,9 @@
   <title>{% block title %}Acompanha Pedido{% endblock %} — Retificadora Tiête</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body{% if nome_usuario_logado %} class="has-top-toolbar"{% endif %}>
+<body{% if nome_usuario_logado and request.endpoint == 'painel' %} class="has-top-toolbar"{% endif %}>
   <div class="bg-decor" width="10" height="14" aria-hidden="true"></div>
-  {% if nome_usuario_logado %}
+  {% if nome_usuario_logado and request.endpoint == 'painel' %}
   <div class="top-toolbar">
     <div class="usuario-logado-chip">
       <span class="usuario-avatar">{{ nome_usuario_logado[0]|upper }}</span>
@@ -32,7 +32,7 @@
   <div class="container">
     {% block content %}{% endblock %}
   </div>
-  {% if perfil_logado == 'G' %}
+  {% if perfil_logado == 'G' and request.endpoint == 'painel' %}
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const dropdown = document.querySelector('.admin-dropdown');

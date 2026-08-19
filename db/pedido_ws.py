@@ -420,7 +420,6 @@ def transferencia_produtos(itens, codemp, codfil, numped, usuario):
         )
     
     client, history = _get_client_estoque()
-    
     try:
         # Montar saída e entrada de todos os itens
         saidas = []

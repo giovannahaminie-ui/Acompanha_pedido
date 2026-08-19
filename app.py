@@ -125,11 +125,18 @@ def painel():
     etapa_nome = next((nome for cod, nome in etapas if str(cod) == etapa), None)
 
     # Colunas visíveis por perfil: Gerência vê tudo; Boqueta vê Solicitado
-    # e Em separação; Usinagem vê só Atendido/Parcial.
+    # e Em separação; Usinagem vê só Atendido/Parcial. Quem ainda não tem
+    # perfil atribuído vê as três colunas, mas só consulta - sem interagir
+    # (assumir solicitação, ir pro detalhe, entregar item).
     perfil = perfil_atual()
-    mostrar_solicitado = perfil in ("G", "B")
-    mostrar_separacao = perfil in ("G", "B")
-    mostrar_atendido = perfil in ("G", "U")
+    if perfil is None:
+        mostrar_solicitado = mostrar_separacao = mostrar_atendido = True
+        somente_visualizacao = True
+    else:
+        mostrar_solicitado = perfil in ("G", "B")
+        mostrar_separacao = perfil in ("G", "B")
+        mostrar_atendido = perfil in ("G", "U")
+        somente_visualizacao = False
     num_colunas_visiveis = sum([mostrar_solicitado, mostrar_separacao, mostrar_atendido]) or 1
 
     return render_template(
@@ -141,6 +148,7 @@ def painel():
         mostrar_solicitado=mostrar_solicitado,
         mostrar_separacao=mostrar_separacao,
         mostrar_atendido=mostrar_atendido,
+        somente_visualizacao=somente_visualizacao,
         num_colunas_visiveis=num_colunas_visiveis,
         tipos_servico=tipos_servico, etapas=etapas,
         tipo_servico_selecionado=tipo_servico, etapa_selecionada=etapa,

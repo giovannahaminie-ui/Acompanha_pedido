@@ -20,6 +20,11 @@
               </svg>
               Trocar seleção
             </a>
+            <button type="button" id="btn-toggle-filtros" class="btn-trocar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <span id="btn-toggle-filtros-texto">Ocultar filtros</span>
+              <svg id="btn-toggle-filtros-seta" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s ease;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
           </div>
         </div>
       </div>
@@ -94,13 +99,12 @@
     </form>
 
     <!-- ÁREA DAS COLUNAS -->
-    {% if not mostrar_solicitado and not mostrar_separacao and not mostrar_atendido %}
-    <div class="empty-state" style="margin:2rem;">
-      <span class="empty-icon">!</span>
-      Seu usuário ainda não tem um perfil de acesso definido. Fale com a gerência.
+    {% if somente_visualizacao %}
+    <div class="alert" style="margin:1.5rem 2rem 0;">
+      Seu usuário ainda não tem um perfil de acesso definido, você pode consultar as solicitações, mas não interagir com elas.
     </div>
-    {% else %}
-    <div class="painel-grid" style="grid-template-columns: repeat({{ num_colunas_visiveis }}, 1fr);">
+    {% endif %}
+    <div class="painel-grid" data-cols="{{ num_colunas_visiveis }}">
 
       {% if mostrar_solicitado %}
       <!-- COLUNA: SOLICITADO -->
@@ -111,7 +115,7 @@
         </div>
         {% if solicitados %}
         <div class="table-scroll">
-          <table class="clickable">
+          <table class="{{ '' if somente_visualizacao else 'clickable' }}">
             <thead>
               <tr>
                 <th style="width:20%;">Data/hora</th>
@@ -123,7 +127,7 @@
             </thead>
             <tbody>
               {% for item in solicitados %}
-              <tr ondblclick="assumirSolicitacao('{{ item.codemp }}','{{ item.codfil }}','{{ item.numsol }}')" title="Duplo clique para assumir">
+              <tr {% if not somente_visualizacao %}ondblclick="assumirSolicitacao('{{ item.codemp }}','{{ item.codfil }}','{{ item.numsol }}')" title="Duplo clique para assumir"{% endif %}>
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
                 <td><span class="mono">{{ item.numped }}</span></td>
@@ -152,7 +156,7 @@
         </div>
         {% if em_separacao %}
         <div class="table-scroll">
-          <table class="clickable">
+          <table class="{{ '' if somente_visualizacao else 'clickable' }}">
             <thead>
               <tr>
                 <th>Data/hora</th>
@@ -164,8 +168,8 @@
             </thead>
             <tbody>
               {% for item in em_separacao %}
-              <tr data-href="{{ url_for('detalhe_solicitacao', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol) }}"
-                  onclick="window.location.href=this.dataset.href" title="Ver detalhe da solicitação">
+              <tr {% if not somente_visualizacao %}data-href="{{ url_for('detalhe_solicitacao', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol) }}"
+                  onclick="window.location.href=this.dataset.href" title="Ver detalhe da solicitação"{% endif %}>
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
                 <td><span class="mono">{{ item.numped }}</span></td>
@@ -205,7 +209,8 @@
             </thead>
             <tbody>
               {% for item in atendidos %}
-              <tr class="linha-atendida" data-codemp="{{ item.codemp }}" data-codfil="{{ item.codfil }}" data-numsol="{{ item.numsol }}" ondblclick="abrirModalEntrega('{{ item.codemp }}', '{{ item.codfil }}', '{{ item.numsol }}')" style="cursor:pointer;" title="Duplo clique para retirar itens">
+              <tr class="linha-atendida" data-codemp="{{ item.codemp }}" data-codfil="{{ item.codfil }}" data-numsol="{{ item.numsol }}"
+                  {% if not somente_visualizacao %}ondblclick="abrirModalEntrega('{{ item.codemp }}', '{{ item.codfil }}', '{{ item.numsol }}')" style="cursor:pointer;" title="Duplo clique para retirar itens"{% endif %}>
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
                 <td><span class="mono">{{ item.numped }}</span></td>
@@ -225,7 +230,6 @@
       {% endif %}
 
     </div>
-    {% endif %}
 
     <!-- MODAL DE ENTREGA -->
     <div id="modal-entrega" class="modal-entrega" style="display:none;">
@@ -301,6 +305,37 @@
     const url = `/solicitacao/assumir/${codemp}/${codfil}/${numsol}`;
     window.location.href = url;
   }
+
+  // Expandir/recolher os filtros do painel (lembra a preferência no navegador)
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('form-filtros-painel');
+    const botao = document.getElementById('btn-toggle-filtros');
+    const texto = document.getElementById('btn-toggle-filtros-texto');
+    const seta = document.getElementById('btn-toggle-filtros-seta');
+    const CHAVE = 'painel_filtros_recolhido';
+
+    function aplicarEstado(recolhido) {
+      form.classList.toggle('recolhido', recolhido);
+      texto.textContent = recolhido ? 'Mostrar filtros' : 'Ocultar filtros';
+      seta.style.transform = recolhido ? 'rotate(-90deg)' : 'rotate(0deg)';
+    }
+
+    aplicarEstado(localStorage.getItem(CHAVE) === '1');
+
+    botao.addEventListener('click', function () {
+      const recolhido = !form.classList.contains('recolhido');
+      aplicarEstado(recolhido);
+      localStorage.setItem(CHAVE, recolhido ? '1' : '0');
+    });
+  });
+
+  // Ajusta o número de colunas do painel conforme o perfil do usuário logado
+  document.addEventListener('DOMContentLoaded', function () {
+    const grid = document.querySelector('.painel-grid[data-cols]');
+    if (grid) {
+      grid.style.gridTemplateColumns = `repeat(${grid.dataset.cols}, 1fr)`;
+    }
+  });
 
   // Selects customizados dos filtros (tipo de serviço / etapa) - ao
   // escolher uma opção, grava no input escondido e já submete o form.

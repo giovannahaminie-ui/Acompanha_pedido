@@ -27,8 +27,8 @@
             </label>
             <div style="display:flex; flex-direction:column; align-items:flex-end;">
             <input type="number" id="qtd_{{ item.seqite }}" name="qtd_{{ item.seqite }}" step="any" min="0.01"
-                  max="{{ item.qtd_sugerida }}" style="width:6rem;" required
-                  oninput="validarQtdCompra(this, {{ item.qtd_sugerida }})">
+                  max="{{ item.qtd_sugerida }}" data-max="{{ item.qtd_sugerida }}" style="width:6rem;" required
+                  oninput="validarQtdCompra(this)">
             <span id="aviso_{{ item.seqite }}" style="display:none; color:var(--st-separacao); font-size:0.72rem; font-weight:600; margin-top:0.2rem; text-align:right;">
               Excede o saldo em aberto ({{ item.qtd_sugerida }})!
             </span>
@@ -46,7 +46,8 @@
   </div>
 </div>
 <script>
-  function validarQtdCompra(input, maximo) {
+  function validarQtdCompra(input) {
+    const maximo = parseFloat(input.dataset.max);
     const aviso = document.getElementById('aviso_' + input.id.replace('qtd_', ''));
     const valor = parseFloat(input.value.replace(',', '.'));
     if (valor > maximo) {
@@ -91,7 +92,7 @@
 
     <div style="margin-bottom: 1.5rem;">
       {% for r in resultados %}
-      <div style="padding: 0.75rem; border-left: 3px solid {{ '#22c55e' if r.sucesso else '#ef4444' }}; background: {{ '#f0fdf4' if r.sucesso else '#fef2f2' }}; margin-bottom: 0.5rem; border-radius: 2px;">
+      <div class="resultado-item {{ 'resultado-sucesso' if r.sucesso else 'resultado-erro' }}">
         <p style="margin: 0 0 0.25rem 0; font-weight: 600; font-size: 0.9rem;">{{ r.item.codpro2 }} — {{ r.item.descricao }}</p>
         <p style="margin: 0; font-size: 0.85rem; color: #666;">{{ r.mensagem }}</p>
       </div>
