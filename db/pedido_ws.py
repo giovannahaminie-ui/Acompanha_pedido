@@ -411,26 +411,48 @@ def _get_client_estoque():
     client = zeep.Client(ESTOQUE_WS_WSDL, plugins=[history])
     return client, history
 
-def transferencia_produtos(itens, codemp, codfil, numped, usuario):
+def _depositos_transferencia(codemp, filexe):
+    """codDep de saída/entrada da TransferenciaProdutos - depende da empresa
+    e, pra empresa 1, da filial de execução do pedido (usu_filexe)."""
+    filexe = (filexe or "").strip().upper()
+    if codemp == 1:
+        if filexe == "P":
+            return "3", "4"
+        if filexe == "L":
+            return "1", "2"
+        if filexe == "C":
+            return "5", "2"
+        return None, None
+    if codemp == 5:
+        return "1", "2"
+    if codemp == 12:
+        return "1", "2"
+    return None, None
+
+def transferencia_produtos(itens, codemp, codfil, numped, usuario, filexe):
     """Transferência de estoque via webservice TransferenciaProdutos."""
     if not (ESTOQUE_WS_WSDL and ESTOQUE_WS_USER and ESTOQUE_WS_PASSWORD):
         raise PedidoWebserviceError(
             "Credenciais de estoque não configuradas. Verifique "
             "ESTOQUE_WS_WSDL/ESTOQUE_WS_USER/ESTOQUE_WS_PASSWORD no .env."
         )
-    
+
+    depsai, depent = _depositos_transferencia(codemp, filexe)
+    if not depsai or not depent:
+        raise PedidoWebserviceError(f"Depósito de transferência não mapeado pra codemp={codemp} filexe={filexe!r}.")
+
     client, history = _get_client_estoque()
     try:
         # Montar saída e entrada de todos os itens
         saidas = []
         entradas = []
-        
+
         for item in itens:
             qtd = float(item["qtd_aberta"]) - float(item["qtd_movimentada"])
             vlr = (item.get("preco_unitario") or 0) * qtd
-            
+
             saidas.append({
-                "codDep": "1",  # depósito de origem
+                "codDep": depsai,  # depósito de origem
                 "codDer": "",
                 "codEmp": codemp,
                 "codFil": codfil,
@@ -441,7 +463,7 @@ def transferencia_produtos(itens, codemp, codfil, numped, usuario):
                 "numDoc": numped,
             })
             entradas.append({
-                "codDep": "2",  # depósito de destino
+                "codDep": depent,  # depósito de destino
                 "codDer": "",
                 "codPro": item["codpro1"],
                 "qtdMov": qtd,

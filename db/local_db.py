@@ -55,9 +55,26 @@ def init_db():
         conn.execute("ALTER TABLE historico_acoes ADD COLUMN codemp INTEGER")
     if "codfil" not in colunas_existentes:
         conn.execute("ALTER TABLE historico_acoes ADD COLUMN codfil INTEGER")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS itens_inserir_pendentes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            codemp INTEGER NOT NULL,
+            codfil INTEGER NOT NULL,
+            numsol INTEGER NOT NULL,
+            codpro TEXT NOT NULL,
+            descricao TEXT,
+            qtd REAL NOT NULL,
+            preco REAL NOT NULL,
+            codtab TEXT,
+            usuario TEXT,
+            criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     conn.commit()
     conn.close()
-
 
 def get_perfil(usuario: str):
     """Retorna 'G' / 'B' / 'U' ou None se o usuário não tem perfil atribuído."""
@@ -202,3 +219,29 @@ def listar_historico_usuario(usuario: str, limite: int = 50):
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+def listar_itens_pendentes(codemp, codfil, numsol):
+    conn = get_conn()
+    linhas = conn.execute(
+        "SELECT * FROM itens_inserir_pendentes WHERE codemp=? AND codfil=? AND numsol=? ORDER BY id",
+        (codemp, codfil, numsol),
+    ).fetchall()
+    conn.close()
+    return [dict(l) for l in linhas]
+
+def adicionar_item_pendente(codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO itens_inserir_pendentes
+           (codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario),
+    )
+    conn.commit()
+    conn.close()
+
+def remover_item_pendente(id_pendente):
+    conn = get_conn()
+    conn.execute("DELETE FROM itens_inserir_pendentes WHERE id=?", (id_pendente,))
+    conn.commit()
+    conn.close()

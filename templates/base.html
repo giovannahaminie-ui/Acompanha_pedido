@@ -32,6 +32,33 @@
   <div class="container">
     {% block content %}{% endblock %}
   </div>
+  {% if request.endpoint != 'painel' %}
+  <script>
+    // Enter avança pro próximo campo em vez de submeter direto - só faz
+    // sentido nas telas de detalhe (inserir peça, conferência etc.), onde
+    // a pessoa escaneia código de barras e o leitor já manda um Enter
+    // junto. Na tela de acompanhamento (painel/filtros) o Enter tem que
+    // buscar direto, então esse script nem carrega lá.
+    document.addEventListener('DOMContentLoaded', function () {
+      const seletorCampos = 'input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([disabled]), select:not([disabled]), textarea:not([disabled])';
+      document.querySelectorAll('form').forEach(function (form) {
+        const campos = Array.prototype.slice.call(form.querySelectorAll(seletorCampos));
+        campos.forEach(function (campo, indice) {
+          campo.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' || campo.tagName === 'TEXTAREA') return;
+            const proximo = campos[indice + 1];
+            if (proximo) {
+              e.preventDefault();
+              proximo.focus();
+              if (typeof proximo.select === 'function') proximo.select();
+            }
+            // último campo: não intercepta, deixa o Enter submeter o formulário
+          });
+        });
+      });
+    });
+  </script>
+  {% endif %}
   {% if perfil_logado == 'G' and request.endpoint == 'painel' %}
   <script>
     document.addEventListener('DOMContentLoaded', function () {

@@ -201,6 +201,38 @@
 
     configurarSelecaoLote('form-pedido-loja', 'contador-pedido-loja', 'btn-pedido-loja');
     configurarSelecaoLote('form-solicitacao-compra', 'contador-solicitacao-compra', 'btn-solicitacao-compra');
+
+    // Painéis embutidos (Inserir peça / Conferência) - só recolhem/expandem
+    // visualmente; o servidor já decide se cada um nasce aberto (ver
+    // painel_inserir_aberto/painel_conf_aberto em app.py) quando tem
+    // pendente/erro/sucesso pra mostrar.
+    //
+    // Dois níveis de visibilidade, controlados por botões diferentes:
+    // - botão lá em cima (ao lado de "Pedir na loja" etc.) mostra/esconde o
+    //   painel inteiro, cabeçalho incluso.
+    // - a setinha dentro do próprio painel só recolhe o conteúdo (campos/
+    //   lista/tabela/botões) - o título e a setinha continuam visíveis, só
+    //   a setinha vira pra indicar que tá recolhido.
+    function configurarPainelRecolhivel(painelId, btnToggleId, conteudoId, btnRecolherId) {
+      const painel = document.getElementById(painelId);
+      const conteudo = document.getElementById(conteudoId);
+      const btnToggle = document.getElementById(btnToggleId);
+      const btnRecolher = document.getElementById(btnRecolherId);
+      if (painel && btnToggle) {
+        btnToggle.addEventListener('click', function () {
+          painel.classList.toggle('aberto');
+        });
+      }
+      if (conteudo && btnRecolher) {
+        btnRecolher.addEventListener('click', function () {
+          conteudo.classList.toggle('recolhido');
+          btnRecolher.classList.toggle('recolhido');
+        });
+      }
+    }
+
+    configurarPainelRecolhivel('painel-inserir-peca', 'btn-toggle-inserir-peca', 'painel-inserir-conteudo', 'btn-recolher-inserir');
+    configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'painel-conferencia-conteudo', 'btn-recolher-conferencia');
   });
 
 </script>
@@ -225,14 +257,14 @@
       </button>
       <span id="contador-solicitacao-compra" class="contador-selecao">Nenhum item selecionado</span>
     </span>
-    <a href="{{ url_for('inserir_item', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn btn-icone" title="Inserir peça nova na solicitação">
+      <button type="button" id="btn-toggle-inserir-peca" class="btn btn-icone" title="Inserir peça nova na solicitação">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       Inserir peça
-    </a>
-    <a href="{{ url_for('conferencia_reserva', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn btn-icone" title="Conferência com reserva">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-     Conferência
-    </a>
+    </button>
+    <button type="button" id="btn-toggle-conferencia" class="btn btn-icone" title="Conferência com reserva">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+      Conferência
+    </button>
     <a href="{{ url_for('historico_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn btn-icone" title="Histórico de ações desta solicitação">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
       Histórico
@@ -240,6 +272,125 @@
   </div>
 </div>
 
+<div id="painel-inserir-peca" class="painel-inserir{{ ' aberto' if painel_inserir_aberto else '' }}">
+  <hr class="divisor-painel">
+  <div class="painel-inserir-cabecalho">
+    <p class="section-title" style="margin:0;">Inserir peça na solicitação</p>
+    <button type="button" id="btn-recolher-inserir" class="btn-remover-pend btn-recolher-painel" title="Recolher">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+    </button>
+  </div>
+
+  <div id="painel-inserir-conteudo" class="painel-conteudo">
+    {% if erro_inserir %}
+      <div class="alert">{{ erro_inserir }}</div>
+    {% endif %}
+
+    {% if pendentes_inserir %}
+    <div class="lista-pendentes">
+      {% for p in pendentes_inserir %}
+      <div class="pend-item">
+        <div class="pend-item-info">
+          <div class="pend-item-titulo">{{ p.codpro }} — {{ p.descricao }}</div>
+          <div class="pend-item-detalhe">Qtd: {{ p.qtd }} · Preço unit.: {{ '%.2f'|format(p.preco) }}</div>
+        </div>
+        <form method="POST" action="{{ url_for('inserir_peca_remover', codemp=codemp, codfil=codfil, numsol=numsol, id_pendente=p.id) }}">
+          <button type="submit" class="btn-remover-pend" title="Remover" aria-label="Remover">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+          </button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('inserir_peca_adicionar', codemp=codemp, codfil=codfil, numsol=numsol) }}" id="form-inserir-peca">
+      <div class="field">
+        <label for="qtd_inserir">Quantidade</label>
+        <input type="number" id="qtd_inserir" name="qtd" step="any" min="0.01" value="1" required>
+      </div>
+      <div class="field">
+        <label for="codpro_inserir">Código do produto novo</label>
+        <input type="text" id="codpro_inserir" name="codpro_novo" required autofocus style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()">
+      </div>
+      <button type="submit" class="btn btn-small">+ Inserir item</button>
+    </form>
+
+    {% if pendentes_inserir %}
+    <form method="POST" action="{{ url_for('inserir_peca_confirmar', codemp=codemp, codfil=codfil, numsol=numsol) }}" style="margin-top:0.85rem;">
+      <button type="submit" class="btn-primary">Confirmar inclusão ({{ pendentes_inserir|length }})</button>
+    </form>
+    {% endif %}
+    <hr class="divisor-painel">
+  </div>
+</div>
+
+<div id="painel-conferencia" class="painel-inserir{{ ' aberto' if painel_conf_aberto else '' }}">
+  <hr class="divisor-painel">
+  <div class="painel-inserir-cabecalho">
+    <p class="section-title" style="margin:0;">Conferência com reserva</p>
+    <button type="button" id="btn-recolher-conferencia" class="btn-remover-pend btn-recolher-painel" title="Recolher">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+    </button>
+  </div>
+
+  <div id="painel-conferencia-conteudo" class="painel-conteudo">
+    {% if erro_conf %}
+      <div class="alert">{{ erro_conf }}</div>
+    {% endif %}
+    {% if sucesso_conf %}
+      <div class="alert" style="background:var(--emerald-soft); border-color:var(--emerald-border);">{{ sucesso_conf }}</div>
+    {% endif %}
+
+    {% if itens_conferencia %}
+    <div class="table-card" style="margin-bottom:1rem;">
+      <table class="tabela-itens">
+        <thead>
+          <tr>
+            <th>Produto</th>
+            <th>Produto 2</th>
+            <th>Descrição do item</th>
+            <th>Endereço</th>
+            <th>Qtd. solic</th>
+            <th>Qtd. aberta</th>
+            <th>Qtd. conf</th>
+            <th>Qtd. mov</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in itens_conferencia %}
+          <tr>
+            <td class="mono">{{ item.codpro1 }}</td>
+            <td class="mono">{{ item.codpro2 }}</td>
+            <td style="white-space:normal;">{{ item.descricao_item or '—' }}</td>
+            <td class="mono">{{ item.endereco or '—' }}</td>
+            <td>{{ item.qtd_solic }}</td>
+            <td>{{ item.qtd_aberta }}</td>
+            <td>{{ item.qtd_atendida }}</td>
+            <td>{{ item.qtd_movimentada }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p style="color:var(--text-mute); font-size:0.85rem; margin:0 0 1rem;">Nenhum item em aberto pra conferência nessa solicitação.</p>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('conferencia_reserva', codemp=codemp, codfil=codfil, numsol=numsol) }}" id="form-conferencia">
+      <div class="field">
+        <label for="qtdcon">Quantidade conferida</label>
+        <input type="number" id="qtdcon" name="qtdcon" step="any" min="0.01" required>
+      </div>
+      <div class="field">
+        <label for="codbar">Código de barras ou produto</label>
+        <input type="text" id="codbar" name="codbar" required autofocus style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()">
+      </div>
+      <button type="submit" class="btn-primary">Conferir</button>
+    </form>
+    <hr class="divisor-painel">
+  </div>
+</div>
 
 <div class="table-card">
   <table class="tabela-itens">

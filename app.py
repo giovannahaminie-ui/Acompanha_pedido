@@ -185,16 +185,39 @@ def assumir_solicitacao(codemp, codfil, numsol):
 # ---------------------------------------------------------------------
 # Segunda tela - detalhe da solicitação (itens + saldo de estoque)
 # ---------------------------------------------------------------------
-@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>")
-@login_obrigatorio
-def detalhe_solicitacao(codemp, codfil, numsol):
+def _render_detalhe(
+    codemp, codfil, numsol,
+    erro_inserir=None, painel_aberto=False,
+    erro_conf=None, sucesso_conf=None, painel_conf_aberto=False,
+):
+    """Monta a tela de detalhe da solicitação, incluindo os painéis embutidos
+    de 'Inserir peça' (lista de peças pendentes vem do banco local, então
+    sobrevive a navegar pra outro lugar e voltar) e de 'Conferência com
+    reserva' (lista de itens ainda abertos pra conferir - sitite 1/2 e
+    ainda não totalmente atendidos)."""
     dados = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    pendentes_inserir = local_db.listar_itens_pendentes(codemp, codfil, numsol)
+    itens_conferencia = [
+        i for i in dados["itens"]
+        if i["sitite"] in (1, 2) and i["qtd_atendida"] < i["qtd_solic"]
+    ]
     return render_template(
         "detalhe_solicitacao.html",
         solicitacao=dados["solicitacao"],
         itens=dados["itens"],
         codemp=codemp, codfil=codfil, numsol=numsol,
+        pendentes_inserir=pendentes_inserir,
+        erro_inserir=erro_inserir,
+        painel_inserir_aberto=painel_aberto or bool(pendentes_inserir),
+        itens_conferencia=itens_conferencia,
+        erro_conf=erro_conf, sucesso_conf=sucesso_conf,
+        painel_conf_aberto=painel_conf_aberto,
     )
+
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>")
+@login_obrigatorio
+def detalhe_solicitacao(codemp, codfil, numsol):
+    return _render_detalhe(codemp, codfil, numsol)
 
 # ---------------------------------------------------------------------
 # Observação do item (botão na coluna de Ações, por item - grava direto na
@@ -253,111 +276,129 @@ def cancelar_item(codemp, codfil, numsol, seqite):
 
 # ---------------------------------------------------------------------
 # Inserir peça nova na solicitação + no pedido (webservice GravarPedidos_15).
-# Ação do cabeçalho da segunda tela (não é mais por item) - fluxo em duas
-# etapas na mesma rota: 1ª submissão valida produto/preço e mostra a
-# comparação pra confirmação manual; 2ª (com "confirmar" no form) executa
-# de fato - primeiro o pedido (webservice), só grava a solicitação
-# (T120SIT) se o webservice confirmar sucesso.
+# Painel embutido na própria tela de detalhe (não é mais página/modal
+# separado) - permite montar uma lista de peças (rota "adicionar", uma
+# validação de produto por vez) antes de gravar de fato no pedido/
+# solicitação (rota "confirmar", processa a lista inteira em sequência).
+# A lista pendente fica salva em local_db (itens_inserir_pendentes), não
+# em campos ocultos do formulário - assim sobrevive a sair da tela e voltar.
 # ---------------------------------------------------------------------
-@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/inserir", methods=["GET", "POST"])
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/inserir/adicionar", methods=["POST"])
 @login_obrigatorio
-def inserir_item(codemp, codfil, numsol):
+def inserir_peca_adicionar(codemp, codfil, numsol):
     cabecalho = oracle_db.get_solicitacao_cabecalho(codemp, codfil, numsol)
+    codpro_novo = request.form.get("codpro_novo", "").strip()
+    try:
+        qtd = float(request.form.get("qtd", "0").replace(",", "."))
+    except ValueError:
+        qtd = 0
 
     erro = None
-    produto = None
-    codpro_novo = ""
-    qtd = 0
-
-    if request.method == "POST":
-        codpro_novo = request.form.get("codpro_novo", "").strip()
+    pendentes_atuais = local_db.listar_itens_pendentes(codemp, codfil, numsol)
+    if not codpro_novo:
+        erro = "Informe o código do produto."
+    elif qtd <= 0:
+        erro = "Informe uma quantidade válida."
+    elif codpro_novo in [p["codpro"] for p in pendentes_atuais]:
+        erro = f"Produto {codpro_novo} já está na lista."
+    else:
+        produto = None
         try:
-            qtd = float(request.form.get("qtd", "0").replace(",", "."))
-        except ValueError:
-            qtd = 0
+            produto = oracle_db.buscar_produto_preco(codemp, codfil, cabecalho["numped"], codpro_novo)
+        except oracle_db.ProdutoAmbiguoError as e:
+            erro = str(e)
+        if not erro:
+            if not produto:
+                erro = f"Produto {codpro_novo} não foi encontrado."
+            elif not produto["ativo"]:
+                erro = f"Produto {codpro_novo} está inativo."
+            elif not produto["preco"]:
+                erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
+            elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, cabecalho["numped"], produto["codpro"]):
+                erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
+            elif oracle_db.produto_ja_esta_no_pedido(codemp, codfil, cabecalho["numped"], produto["codpro"]):
+                erro = f"Produto {codpro_novo} já existe nesse pedido."
+        if not erro:
+            local_db.adicionar_item_pendente(
+                codemp, codfil, numsol, produto["codpro"], produto["descricao"],
+                qtd, produto["preco"], produto["codtab"], session["usuario"],
+            )
 
-        if qtd <= 0:
-            erro = "Informe uma quantidade válida."
-        else:
-            try:
-                produto = oracle_db.buscar_produto_preco(codemp, codfil, cabecalho["numped"], codpro_novo)
-            except oracle_db.ProdutoAmbiguoError as e:
-                erro = str(e)
-            if not erro:
-                if not produto:
-                    erro = f"Produto {codpro_novo} não foi encontrado."
-                elif not produto["ativo"]:
-                    erro = f"Produto {codpro_novo} está inativo."
-                elif not produto["preco"]:
-                    erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
-                elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, cabecalho["numped"], produto["codpro"]):
-                    erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
-                elif oracle_db.produto_ja_esta_no_pedido(codemp, codfil, cabecalho["numped"], produto["codpro"]):
-                    erro = f"Produto {codpro_novo} já existe nesse pedido."
+    if erro:
+        return _render_detalhe(codemp, codfil, numsol, erro_inserir=erro, painel_aberto=True)
+    return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
-        if not erro and request.form.get("confirmar"):
-            try:
-                seqipd_novo = pedido_ws.incluir_item_pedido(
-                    codemp, codfil, cabecalho["numped"], produto["codpro"], qtd,
-                    produto["preco"], produto["codtab"], session["usuario"],
-                )
-                oracle_db.inserir_item_solicitacao(
-                    codemp, codfil, numsol, cabecalho["numped"], seqipd_novo, produto["codpro"],
-                    produto["descricao"], qtd, session["usuario"],
-                )
-                return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
-            except pedido_ws.PedidoWebserviceError as e:
-                erro = str(e)
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/inserir/remover/<int:id_pendente>", methods=["POST"])
+@login_obrigatorio
+def inserir_peca_remover(codemp, codfil, numsol, id_pendente):
+    local_db.remover_item_pendente(id_pendente)
+    return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
-    return render_template(
-        "inserir_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
-        cabecalho=cabecalho, produto=produto, qtd=qtd, codpro_novo=codpro_novo, erro=erro,
-    )
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/inserir/confirmar", methods=["POST"])
+@login_obrigatorio
+def inserir_peca_confirmar(codemp, codfil, numsol):
+    cabecalho = oracle_db.get_solicitacao_cabecalho(codemp, codfil, numsol)
+    pendentes = local_db.listar_itens_pendentes(codemp, codfil, numsol)
+    if not pendentes:
+        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+
+    try:
+        for item in pendentes:
+            seqipd_novo = pedido_ws.incluir_item_pedido(
+                codemp, codfil, cabecalho["numped"], item["codpro"], item["qtd"],
+                item["preco"], item["codtab"], session["usuario"],
+            )
+            oracle_db.inserir_item_solicitacao(
+                codemp, codfil, numsol, cabecalho["numped"], seqipd_novo, item["codpro"],
+                item["descricao"], item["qtd"], session["usuario"],
+            )
+            local_db.remover_item_pendente(item["id"])
+    except pedido_ws.PedidoWebserviceError as e:
+        return _render_detalhe(codemp, codfil, numsol, erro_inserir=f"Falha ao incluir peça: {e}", painel_aberto=True)
+
+    return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
 # ---------------------------------------------------------------------
 # Conferência com reserva - código de barras/produto + qtd (qtdcon).
-# Tela pensada pra ficar aberta durante a conferência: cada envio resolve
-# um produto, valida e grava; a pessoa continua conferindo o próximo item
-# na mesma tela (não fecha depois de um envio com sucesso).
+# Painel embutido na tela de detalhe (mesma lógica do painel de Inserir
+# peça) - cada envio resolve um produto, valida e grava, e a própria tela
+# de detalhe é re-renderizada com o painel aberto pra pessoa continuar
+# conferindo o próximo item sem sair do lugar.
 # ---------------------------------------------------------------------
-@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia", methods=["GET", "POST"])
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia", methods=["POST"])
 @login_obrigatorio
 def conferencia_reserva(codemp, codfil, numsol):
     erro = None
     sucesso = None
 
-    if request.method == "POST":
-        codbar = request.form.get("codbar", "").strip()
-        try:
-            qtdcon = float(request.form.get("qtdcon", "0").replace(",", "."))
-        except ValueError:
-            qtdcon = 0
+    codbar = request.form.get("codbar", "").strip()
+    try:
+        qtdcon = float(request.form.get("qtdcon", "0").replace(",", "."))
+    except ValueError:
+        qtdcon = 0
 
-        if not codbar:
-            erro = "Informe o código de barras ou do produto."
-        elif qtdcon <= 0:
-            erro = "Informe uma quantidade válida."
+    if not codbar:
+        erro = "Informe o código de barras ou do produto."
+    elif qtdcon <= 0:
+        erro = "Informe uma quantidade válida."
+    else:
+        codpro = oracle_db.resolver_codpro_conferencia(codemp, codbar)
+        if not codpro:
+            erro = f"Código {codbar} não encontrado (nem como derivação, nem código de barras, nem produto)."
         else:
-            codpro = oracle_db.resolver_codpro_conferencia(codemp, codbar)
-            if not codpro:
-                erro = f"Código {codbar} não encontrado (nem como derivação, nem código de barras, nem produto)."
+            item = oracle_db.get_item_para_conferencia(codemp, codfil, numsol, codpro)
+            if not item:
+                erro = f"Produto {codpro} não tem item em aberto nessa solicitação."
+            elif qtdcon > item["qtd_aberta"]:
+                erro = f"Quantidade conferida ({qtdcon}) é maior que a quantidade aberta ({item['qtd_aberta']})."
             else:
-                item = oracle_db.get_item_para_conferencia(codemp, codfil, numsol, codpro)
-                if not item:
-                    erro = f"Produto {codpro} não tem item em aberto nessa solicitação."
-                elif qtdcon > item["qtd_aberta"]:
-                    erro = f"Quantidade conferida ({qtdcon}) é maior que a quantidade aberta ({item['qtd_aberta']})."
-                else:
-                    filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
-                    coddep = oracle_db.get_coddep_esperado(codemp, filexe)
-                    item["codpro"] = codpro
-                    oracle_db.conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, qtdcon)
-                    sucesso = f"Produto {codpro} - {qtdcon} conferido(s) e reservado(s) com sucesso."
+                filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
+                coddep = oracle_db.get_coddep_esperado(codemp, filexe)
+                item["codpro"] = codpro
+                oracle_db.conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, qtdcon)
+                sucesso = f"Produto {codpro} - {qtdcon} conferido(s) e reservado(s) com sucesso."
 
-    return render_template(
-        "conferencia_reserva.html", codemp=codemp, codfil=codfil, numsol=numsol,
-        erro=erro, sucesso=sucesso,
-    )
+    return _render_detalhe(codemp, codfil, numsol, erro_conf=erro, sucesso_conf=sucesso, painel_conf_aberto=True)
 
 # ---------------------------------------------------------------------
 # Troca de peça: cancela o item substituído no pedido + na solicitação e
@@ -822,10 +863,12 @@ def api_itens_entrega(codemp, codfil, numsol):
 
     itens_entrega = []
     for i in detalhe["itens"]:
+        qtd_solic = float(str(i["qtd_solic"]).replace(",", "."))
+        qtd_mso = float(str(i["qtd_mso"] or 0).replace(",", "."))
         qtd_aberta = float(str(i["qtd_aberta"]).replace(",", "."))
         qtd_movi = float(str(i["qtd_movimentada"]).replace(",", "."))
 
-        if (qtd_aberta - qtd_movi) > 0:
+        if (qtd_solic + qtd_mso) > qtd_aberta:
             itens_entrega.append({
                 "seqite": i["seqite"],
                 "codpro2": i["codpro2"],
@@ -846,9 +889,9 @@ def entrega_item(codemp, codfil, numsol):
     
     # Filtra apenas itens com saldo a entregar
     itens_entrega = [
-        i for i in detalhe["itens"]
-        if (float(i["qtd_aberta"]) - float(i["qtd_movimentada"])) > 0
-    ]
+    i for i in detalhe["itens"]
+    if (float(i["qtd_solic"]) + float(i["qtd_mso"] or 0)) > float(i["qtd_aberta"])
+]
     
     if request.method == "POST":
         seqites = [int(s) for s in request.form.getlist("seqites")]
@@ -857,12 +900,14 @@ def entrega_item(codemp, codfil, numsol):
         if itens_selecionados:
             try:
                 # Chamar webservice com todos os itens de uma vez
+                filexe = oracle_db.get_filial_pedido(codemp, codfil, detalhe["numped"])
                 sucesso, datmovws = pedido_ws.transferencia_produtos(
                     itens=itens_selecionados,
                     codemp=codemp,
                     codfil=codfil,
                     numped=detalhe["numped"],
                     usuario=session["usuario"],
+                    filexe=filexe,
                 )
                 
                 if sucesso:
