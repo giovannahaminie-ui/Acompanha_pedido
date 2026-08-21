@@ -305,13 +305,15 @@
     {% endif %}
 
     <form method="POST" action="{{ url_for('inserir_peca_adicionar', codemp=codemp, codfil=codfil, numsol=numsol) }}" id="form-inserir-peca">
-      <div class="field">
+      <div style="display:flex; gap:0.75rem;">
+        <div class="field" style="width: 6rem; flex:none;">
         <label for="qtd_inserir">Quantidade</label>
-        <input type="number" id="qtd_inserir" name="qtd" step="any" min="0.01" value="1" required>
+        <input type="number" id="qtd_inserir" name="qtd" step="any" min="1" value="1" required style="width: 100%;">
       </div>
-      <div class="field">
+      <div class="field" style="flex:1;">
         <label for="codpro_inserir">Código do produto novo</label>
-        <input type="text" id="codpro_inserir" name="codpro_novo" required autofocus style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()">
+        <input type="text" id="codpro_inserir" name="codpro_novo" required autofocus style="text-transform: uppercase; width: 100%;" oninput="this.value = this.value.toUpperCase()">
+        </div>
       </div>
       <button type="submit" class="btn btn-small">+ Inserir item</button>
     </form>

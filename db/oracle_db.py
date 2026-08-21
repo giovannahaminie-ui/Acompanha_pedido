@@ -1319,7 +1319,7 @@ def atualizar_mvp(codemp, codpro, numped, seqipd, usuario, datmovws):
 
 
 SQL_ATUALIZAR_IPD = """
-                UPDATE E120ipd SET usu_qtdmov = usu_qtdmov + :qtd, qtdres = qtdres - :qtd
+                UPDATE E120IPD SET usu_qtdmov = usu_qtdmov + :qtd, qtdres = qtdres - :qtd
                 WHERE codemp=:codemp 
                 AND codfil=:filped 
                 AND numped=:numped 
