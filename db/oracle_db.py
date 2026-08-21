@@ -1286,15 +1286,15 @@ def atualizar_itens_solicitacao_com_oc(codemp, codfil, numsol, seqites):
 SQL_ATUALIZAR_MVP = """
 
             UPDATE sapiens.E210MVP SET 
-            usures=:usuario, 
-            filped=:filped, 
-            numped=:numped, 
-            seqipd=:seqipd 
-            WHERE codemp=:codemp 
-            AND codpro=:codpro 
-            AND datmov=:datmovws 
-            AND numdoc=:numped 
-            AND coddep IN (:depsai,:depent)
+                usures=:usuario, 
+                filped=:filped, 
+                numped=:numped, 
+                seqipd=:seqipd 
+                WHERE codemp=:codemp 
+                AND codpro=:codpro 
+                AND datmov=:datmovws 
+                AND numdoc=:numped 
+                AND coddep IN (:depsai,:depent)
 
 """
 
@@ -1317,13 +1317,32 @@ def atualizar_mvp(codemp, codpro, numped, seqipd, usuario, datmovws):
     conn.commit()
     conn.close()
 
+# ---------------------------------------------------------------------
+# Estorno da reserva - Na hora da entrega
+# ---------------------------------------------------------------------    
+
+SQL_ESTORNAR_RESERVA_ESTOQUE = """
+                UPDATE sapiens.E210EST
+                    SET qtdres = qtdres - :qtd
+                WHERE codemp = :codemp
+                AND coddep = :coddep
+                AND codpro = :codpro
+"""
+
+def estornar_reserva_estoque(codemp, coddep, codpro, qtd):
+    "Estorna na tabela E210EST a reserva feita na conferencia no momento da entrega."
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_ESTORNAR_RESERVA_ESTOQUE, {"qtd": qtd, "codemp": codemp, "coddep": coddep, "codpro": codpro})
+    conn.commit()
+    conn.close()
 
 SQL_ATUALIZAR_IPD = """
                 UPDATE E120IPD SET usu_qtdmov = usu_qtdmov + :qtd, qtdres = qtdres - :qtd
-                WHERE codemp=:codemp 
-                AND codfil=:filped 
-                AND numped=:numped 
-                AND seqipd=:seqipd
+                    WHERE codemp=:codemp 
+                    AND codfil=:filped 
+                    AND numped=:numped 
+                    AND seqipd=:seqipd
 
 """
 

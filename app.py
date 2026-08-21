@@ -863,21 +863,21 @@ def api_itens_entrega(codemp, codfil, numsol):
 
     itens_entrega = []
     for i in detalhe["itens"]:
-        qtd_solic = float(str(i["qtd_solic"]).replace(",", "."))
-        qtd_mso = float(str(i["qtd_mso"] or 0).replace(",", "."))
-        qtd_aberta = float(str(i["qtd_aberta"]).replace(",", "."))
-        qtd_movi = float(str(i["qtd_movimentada"]).replace(",", "."))
+        qtd_atendida = float(str(i["qtd_atendida"]).replace(",","."))
+        qtd_aberta = float(str(i["qtd_aberta"]).replace(",","."))
+        qtd_movi = float(str(i["qtd_movimentada"]).replace(",","."))
 
-        if (qtd_solic + qtd_mso) > qtd_aberta:
+        if qtd_atendida > qtd_movi:
             itens_entrega.append({
-                "seqite": i["seqite"],
-                "codpro2": i["codpro2"],
-                "codpro1": i["codpro1"],
-                "descricao": i["descricao"],
-                "qtd_aberta": qtd_aberta,
-                "qtd_movi": qtd_movi,
-                "seqipd": i["seqipd"]
-            })
+            "seqite": i["seqite"],
+            "codpro2": i["codpro2"],
+            "codpro1": i["codpro1"],
+            "descricao": i["descricao"],
+            "qtd_aberta": qtd_aberta,
+            "qtd_atendida": qtd_atendida,
+            "qtd_movi": qtd_movi,
+            "seqipd": i["seqipd"]
+        })
 
     return jsonify({"itens": itens_entrega})
 
@@ -890,7 +890,7 @@ def entrega_item(codemp, codfil, numsol):
     # Filtra apenas itens com saldo a entregar
     itens_entrega = [
     i for i in detalhe["itens"]
-    if (float(i["qtd_solic"]) + float(i["qtd_mso"] or 0)) > float(i["qtd_aberta"])
+    if float(i["qtd_atendida"]) > float(i["qtd_movimentada"])
 ]
     
     if request.method == "POST":
@@ -901,6 +901,7 @@ def entrega_item(codemp, codfil, numsol):
             try:
                 # Chamar webservice com todos os itens de uma vez
                 filexe = oracle_db.get_filial_pedido(codemp, codfil, detalhe["numped"])
+                coddep = oracle_db.get_coddep_esperado(codemp, filexe)
                 sucesso, datmovws = pedido_ws.transferencia_produtos(
                     itens=itens_selecionados,
                     codemp=codemp,
@@ -923,6 +924,9 @@ def entrega_item(codemp, codfil, numsol):
                         oracle_db.atualizar_ipd(
                             codemp=codemp, filped=codfil, numped=detalhe["numped"],
                             seqipd=item["seqipd"], qtd=qtd_entrega
+                        )
+                        oracle_db.estornar_reserva_estoque(
+                            codemp=codemp, coddep=coddep, codpro=item["codpro1"], qtd=qtd_entrega
                         )
                         oracle_db.atualizar_entrega_e120sit(
                             codemp=codemp, codfil=codfil, numsol=numsol,

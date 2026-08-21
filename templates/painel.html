@@ -383,7 +383,7 @@
         if (data.itens && data.itens.length > 0) {
           itemsDiv.innerHTML = '';
           data.itens.forEach(item => {
-            const qtd_entregar = item.qtd_aberta - item.qtd_movi;
+            const qtd_entregar = item.qtd_atendida - item.qtd_movi;
             if (qtd_entregar > 0) {
               const itemHTML = `
                 <div style="padding:0.75rem; border:1px solid #e5e7eb; border-radius:4px; margin-bottom:0.5rem;">
@@ -434,7 +434,7 @@
         .then(response => response.json())
         .then(data => {
           if (data.itens && data.itens.length > 0) {
-            const temDisponivel = data.itens.some(item => (item.qtd_aberta - item.qtd_movi) > 0);
+            const temDisponivel = data.itens.some(item => (item.qtd_atendida - item.qtd_movi) > 0);
             if (temDisponivel) {
               linha.style.backgroundColor = '#dcfce7';
             }
