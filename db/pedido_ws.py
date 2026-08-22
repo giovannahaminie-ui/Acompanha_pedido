@@ -501,7 +501,7 @@ def transferencia_produtos(itens, codemp, codfil, numped, usuario, filexe):
         tipo_retorno = getattr(resultado, "tipoRetorno", None)
         mensagem_retorno = getattr(resultado, "mensagemRetorno", None)
         datmovws = getattr(resultado, "datMov", None) or datetime.now().strftime("%d/%m/%Y")
-        sucesso = (tipo_retorno == 1)
+        sucesso = tipo_retorno is not None and int(tipo_retorno) == 1
 
         return sucesso, datmovws, mensagem_retorno
     

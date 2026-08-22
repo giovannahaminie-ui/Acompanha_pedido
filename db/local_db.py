@@ -73,6 +73,22 @@ def init_db():
         )
         """
     )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS
+    itens_conferencia_pendentes(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            codemp INTEGER NOT NULL,
+            codfil INTEGER NOT NULL,
+            numsol INTEGER NOT NULL,
+            codbar TEXT NOT NULL,
+            qtd REAL NOT NULL,
+            usuario TEXT,
+            criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -243,5 +259,33 @@ def adicionar_item_pendente(codemp, codfil, numsol, codpro, descricao, qtd, prec
 def remover_item_pendente(id_pendente):
     conn = get_conn()
     conn.execute("DELETE FROM itens_inserir_pendentes WHERE id=?", (id_pendente,))
+    conn.commit()
+    conn.close()
+
+def listar_itens_conferencia_pendentes(codemp, codfil, numsol):
+    conn = get_conn()
+    linhas = conn.execute(
+        "SELECT * FROM itens_conferencia_pendentes "
+        "WHERE codemp = ? AND codfil = ? AND numsol = ? "
+        "ORDER BY id",
+        (codemp, codfil, numsol),
+    ).fetchall()
+    conn.close()
+    return [dict(l) for l in linhas]
+
+def adicionar_item_conferencia_pendentes(codemp, codfil, numsol, codbar, qtd, usuario):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO itens_conferencia_pendentes(codemp, codfil, numsol, codbar, qtd, usuario)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+           (codemp, codfil, numsol, codbar, qtd, usuario),
+    )
+    conn.commit()
+    conn.close()
+
+def remover_item_conferencia_pendente(id_pendente):
+    conn = get_conn()
+    conn.execute("DELETE FROM itens_conferencia_pendentes WHERE id=?", 
+    (id_pendente,))
     conn.commit()
     conn.close()

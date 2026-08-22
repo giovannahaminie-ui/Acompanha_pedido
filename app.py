@@ -190,13 +190,9 @@ def _render_detalhe(
     erro_inserir=None, painel_aberto=False,
     erro_conf=None, sucesso_conf=None, painel_conf_aberto=False,
 ):
-    """Monta a tela de detalhe da solicitação, incluindo os painéis embutidos
-    de 'Inserir peça' (lista de peças pendentes vem do banco local, então
-    sobrevive a navegar pra outro lugar e voltar) e de 'Conferência com
-    reserva' (lista de itens ainda abertos pra conferir - sitite 1/2 e
-    ainda não totalmente atendidos)."""
     dados = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
     pendentes_inserir = local_db.listar_itens_pendentes(codemp, codfil, numsol)
+    pendentes_conferencia = local_db.listar_itens_conferencia_pendentes(codemp, codfil, numsol)
     itens_conferencia = [
         i for i in dados["itens"]
         if i["sitite"] in (1, 2) and i["qtd_atendida"] < i["qtd_solic"]
@@ -210,8 +206,9 @@ def _render_detalhe(
         erro_inserir=erro_inserir,
         painel_inserir_aberto=painel_aberto or bool(pendentes_inserir),
         itens_conferencia=itens_conferencia,
+        pendentes_conferencia=pendentes_conferencia,
         erro_conf=erro_conf, sucesso_conf=sucesso_conf,
-        painel_conf_aberto=painel_conf_aberto,
+        painel_conf_aberto=painel_conf_aberto or bool(pendentes_conferencia),
     )
 
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>")
@@ -359,19 +356,14 @@ def inserir_peca_confirmar(codemp, codfil, numsol):
     return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
 # ---------------------------------------------------------------------
-# Conferência com reserva - código de barras/produto + qtd (qtdcon).
-# Painel embutido na tela de detalhe (mesma lógica do painel de Inserir
-# peça) - cada envio resolve um produto, valida e grava, e a própria tela
-# de detalhe é re-renderizada com o painel aberto pra pessoa continuar
-# conferindo o próximo item sem sair do lugar.
+ #Conferência com reserva - bipar/adicionar fica local (rápido, sem ida
+# ao Oracle); "confirmar" processa a lista inteira de uma vez só.
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia", methods=["POST"])
 @login_obrigatorio
-def conferencia_reserva(codemp, codfil, numsol):
+def conferencia_adicionar(codemp, codfil, numsol):
     erro = None
-    sucesso = None
-
-    codbar = request.form.get("codbar", "").strip()
+    codbar = request.form.get("codbar", "").strip().upper()
     try:
         qtdcon = float(request.form.get("qtdcon", "0").replace(",", "."))
     except ValueError:
@@ -382,22 +374,50 @@ def conferencia_reserva(codemp, codfil, numsol):
     elif qtdcon <= 0:
         erro = "Informe uma quantidade válida."
     else:
-        codpro = oracle_db.resolver_codpro_conferencia(codemp, codbar)
-        if not codpro:
-            erro = f"Código {codbar} não encontrado (nem como derivação, nem código de barras, nem produto)."
-        else:
-            item = oracle_db.get_item_para_conferencia(codemp, codfil, numsol, codpro)
-            if not item:
-                erro = f"Produto {codpro} não tem item em aberto nessa solicitação."
-            elif qtdcon > item["qtd_aberta"]:
-                erro = f"Quantidade conferida ({qtdcon}) é maior que a quantidade aberta ({item['qtd_aberta']})."
-            else:
-                filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
-                coddep = oracle_db.get_coddep_esperado(codemp, filexe)
-                item["codpro"] = codpro
-                oracle_db.conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, qtdcon)
-                sucesso = f"Produto {codpro} - {qtdcon} conferido(s) e reservado(s) com sucesso."
+        local_db.adicionar_item_conferencia_pendentes(
+            codemp, codfil, numsol, codbar, qtdcon, session["usuario"],
+        )
 
+    return _render_detalhe(codemp, codfil, numsol, erro_conf=erro, painel_conf_aberto=True)
+
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia/remover/<int:id_pendente>", methods=["POST"])
+@login_obrigatorio
+def conferencia_remover(codemp, codfil, numsol, id_pendente):
+    local_db.remover_item_conferencia_pendente(id_pendente)
+    return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia/confirmar", methods=["POST"])
+@login_obrigatorio
+def conferencia_confirmar(codemp, codfil, numsol):
+    pendentes = local_db.listar_itens_conferencia_pendentes(codemp, codfil, numsol)
+    if not pendentes:
+        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+
+    erro = None
+    sucesso_count = 0
+    for p in pendentes:
+        codpro = oracle_db.resolver_codpro_conferencia(codemp, p["codbar"])
+
+        if not codpro: 
+            erro = f"Código {p['codbar']} não encontrado (nem como derivação, nem código de barras, nem produto. Verificar)."
+            break
+
+        item = oracle_db.get_item_para_conferencia(codemp, codfil, numsol, codpro)
+        if not item:
+            erro = f"Produto {codpro} não possui item em aberto nessa solicitação."
+            break
+        if p["qtd"] > item["qtd_aberta"]:
+            erro = f"Quantidade conferida ({p['qtd']}) é maior que a quantidade em aberto ({item['qtd_aberta']}) do produto {codpro}."
+            break
+
+        filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
+        coddep = oracle_db.get_coddep_esperado(codemp, filexe)
+        item["codpro"] = codpro
+        oracle_db.conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, p["qtd"])
+        local_db.remover_item_conferencia_pendente(p["id"])
+        sucesso_count += 1
+
+    sucesso = f"{sucesso_count} item(ns) conferido(s) e reservado(s) com sucesso" if sucesso_count else None
     return _render_detalhe(codemp, codfil, numsol, erro_conf=erro, sucesso_conf=sucesso, painel_conf_aberto=True)
 
 # ---------------------------------------------------------------------
