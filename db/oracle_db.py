@@ -1338,7 +1338,7 @@ def estornar_reserva_estoque(codemp, coddep, codpro, qtd):
     conn.close()
 
 SQL_ATUALIZAR_IPD = """
-                UPDATE E120IPD SET usu_qtdmov = usu_qtdmov + :qtd, qtdres = qtdres - :qtd
+                UPDATE sapiens.E120IPD SET usu_qtdmov = usu_qtdmov + :qtd, qtdres = qtdres - :qtd
                     WHERE codemp=:codemp 
                     AND codfil=:filped 
                     AND numped=:numped 

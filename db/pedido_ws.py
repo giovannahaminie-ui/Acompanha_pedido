@@ -76,22 +76,34 @@ def _envelope_para_texto(entrada_historico):
     xml = etree.tostring(entrada_historico["envelope"], pretty_print=True).decode()
     return re.sub(r"(<(?:\w+:)?password>).*?(</(?:\w+:)?password>)", r"\1****\2", xml)
 
+def _ultima_transacao(history):
+    """(last_sent, last_received) do HistoryPlugin - o zeep guarda isso numa
+    deque sem checar se ela está vazia, então dá IndexError quando a chamada
+    falha antes de chegar a enviar o envelope (ex: erro de validação dos
+    parâmetros). Aqui a gente trata isso como 'nada capturado', pra não
+    mascarar o erro de verdade que estourou na chamada do webservice."""
+    try:
+        return history.last_sent, history.last_received
+    except IndexError:
+        return None, None
+
 def _log_envelopes(history, operacao):
+    last_sent, last_received = _ultima_transacao(history)
     logger.info(
         "%s - enviado:\n%s\n%s - recebido:\n%s",
-        operacao, _envelope_para_texto(history.last_sent),
-        operacao, _envelope_para_texto(history.last_received),
+        operacao, _envelope_para_texto(last_sent),
+        operacao, _envelope_para_texto(last_received),
     )
-    _salvar_xml_arquivos(history, operacao)
+    _salvar_xml_arquivos(last_sent, last_received, operacao)
 
-def _salvar_xml_arquivos(history, operacao):
+def _salvar_xml_arquivos(last_sent, last_received, operacao):
     """Salva o envelope enviado e o recebido como arquivos .xml separados em
     logs/xml/ (um par por chamada, nomeado com timestamp + operação) - além
     do log de texto único (_log_envelopes), pra poder abrir cada retorno
     isolado (ex: num editor de XML) sem procurar dentro do log grande."""
 
     agora = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    for sufixo, entrada in (("enviado", history.last_sent), ("recebido", history.last_received)):
+    for sufixo, entrada in (("enviado", last_sent), ("recebido", last_received)):
         xml = _envelope_para_texto(entrada)
         caminho = _XML_DIR / f"{agora}_{operacao}_{sufixo}.xml"
         caminho.write_text(xml, encoding="utf-8")
@@ -448,8 +460,8 @@ def transferencia_produtos(itens, codemp, codfil, numped, usuario, filexe):
         entradas = []
 
         for item in itens:
-            qtd = float(item["qtd_aberta"]) - float(item["qtd_movimentada"])
-            vlr = (item.get("preco_unitario") or 0) * qtd
+            qtd = float(item["qtd_atendida"]) - float(item["qtd_movimentada"])
+            vlr = "1,00"
 
             saidas.append({
                 "codDep": depsai,  # depósito de origem
@@ -458,17 +470,17 @@ def transferencia_produtos(itens, codemp, codfil, numped, usuario, filexe):
                 "codFil": codfil,
                 "codPro": item["codpro1"],
                 "codTns": "90253",
-                "qtdMov": qtd,
-                "VlrMov": vlr,
+                "qtdMov": _fmt_numero(qtd),
+                "vlrMov": vlr,
                 "numDoc": numped,
             })
             entradas.append({
                 "codDep": depent,  # depósito de destino
                 "codDer": "",
                 "codPro": item["codpro1"],
-                "qtdMov": qtd,
-                "Vlrmov": vlr,
-                "Numdoc": numped,
+                "qtdMov": _fmt_numero(qtd),
+                "vlrMov": vlr,
+                "numDoc": numped,
             })
         
         resposta = client.service.TransferenciaProdutos(
@@ -481,11 +493,17 @@ def transferencia_produtos(itens, codemp, codfil, numped, usuario, filexe):
             },
         )
         
-        # Extrair data da resposta
-        datmovws = getattr(resposta, "datMov", datetime.now().strftime("%d/%m/%Y"))
-        sucesso = getattr(resposta, "sucesso", False)
-        
-        return sucesso, datmovws
+        # A resposta não tem campo "sucesso" - o sucesso real está em
+        # result.tipoRetorno == 1 (mesma convenção do tipRet documentado
+        # pro GravarPedidos_15, só que aqui o nome do campo é outro).
+        # Também não vem "datMov", então mantém o fallback pra data atual.
+        resultado = getattr(resposta, "result", resposta)
+        tipo_retorno = getattr(resultado, "tipoRetorno", None)
+        mensagem_retorno = getattr(resultado, "mensagemRetorno", None)
+        datmovws = getattr(resultado, "datMov", None) or datetime.now().strftime("%d/%m/%Y")
+        sucesso = (tipo_retorno == 1)
+
+        return sucesso, datmovws, mensagem_retorno
     
     except Exception as e:
         raise PedidoWebserviceError(f"Erro transferência: {str(e)}")
