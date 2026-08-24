@@ -192,6 +192,22 @@ def incluir_item_pedido(codemp, codfil, numped, codpro, qtd, preco, codtab, usua
     resposta = _chamar_gravar_pedidos([pedido], "incluir_item_pedido")
     return _seqipd_da_resposta(resposta, codpro)
 
+def adicionar_qtd_item_pedido(codemp, codfil, numped, seqipd, qtd_adicionar, usuario):
+    """Aumenta a quantidade de um item já existente no pedido (E120IPD, via
+    seqIpd) - opeExe='A' com qtdPed = delta a somar (é a quantidade extra,
+    não o total final - mesma lógica do qtdCan do cancelamento)."""
+    pedido = {
+        "opeExe": "A", "codEmp": codemp, "codFil": codfil, "numPed": numped,
+        "produto": [{
+            "opeExe": "A",
+            "seqIpd": seqipd,
+            "qtdPed": _fmt_numero(qtd_adicionar),
+            "usuario": [{"cmpUsu": "USUALT", "vlrUsu": str(usuario)}],
+        }],
+    }
+    _chamar_gravar_pedidos([pedido], "adicionar_qtd_item_pedido")
+    return True
+
 # ---------------------------------------------------------------------
 # Webservice (GravarPedido_15) - Pedido na loja (RTL)
 # ---------------------------------------------------------------------

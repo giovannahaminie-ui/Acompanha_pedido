@@ -74,6 +74,14 @@ def init_db():
         """
     )
 
+    colunas_pendentes = {row["name"] for row in conn.execute("PRAGMA table_info(itens_inserir_pendentes)").fetchall()}
+    if "is_alteracao" not in colunas_pendentes:
+        conn.execute("ALTER TABLE itens_inserir_pendentes ADD COLUMN is_alteracao INTEGER DEFAULT 0")
+    if "seqite_existente" not in colunas_pendentes:
+        conn.execute("ALTER TABLE itens_inserir_pendentes ADD COLUMN seqite_existente INTEGER")
+    if "seqipd_existente" not in colunas_pendentes:
+        conn.execute("ALTER TABLE itens_inserir_pendentes ADD COLUMN seqipd_existente INTEGER")
+
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS
@@ -245,13 +253,16 @@ def listar_itens_pendentes(codemp, codfil, numsol):
     conn.close()
     return [dict(l) for l in linhas]
 
-def adicionar_item_pendente(codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario):
+def adicionar_item_pendente(codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario,
+                             is_alteracao=False, seqite_existente=None, seqipd_existente=None):
     conn = get_conn()
     conn.execute(
         """INSERT INTO itens_inserir_pendentes
-           (codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario),
+           (codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario,
+            is_alteracao, seqite_existente, seqipd_existente)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario,
+         1 if is_alteracao else 0, seqite_existente, seqipd_existente),
     )
     conn.commit()
     conn.close()

@@ -27,7 +27,7 @@
             </label>
             <div style="display:flex; flex-direction:column; align-items:flex-end;">
             <input type="number" id="qtd_{{ item.seqite }}" name="qtd_{{ item.seqite }}" step="any" min="0.01"
-                  max="{{ item.qtd_sugerida }}" data-max="{{ item.qtd_sugerida }}" style="width:6rem;" required
+                  max="{{ item.qtd_sugerida }}" data-max="{{ item.qtd_sugerida }}" style="width:6rem;" required {% if loop.first %}autofocus{% endif %}
                   oninput="validarQtdCompra(this)">
             <span id="aviso_{{ item.seqite }}" style="display:none; color:var(--st-separacao); font-size:0.72rem; font-weight:600; margin-top:0.2rem; text-align:right;">
               Excede o saldo em aberto ({{ item.qtd_sugerida }})!

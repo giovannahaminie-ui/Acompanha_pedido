@@ -78,18 +78,6 @@
                placeholder="Número da solicitação" value="{{ numsol_selecionado or '' }}">
       </div>
 
-      <div class="painel-filtro-campo" style="max-width:160px;">
-        <label for="data_inicio">Data início</label>
-        <input type="date" id="data_inicio" name="data_inicio" class="input-compact"
-               value="{{ data_inicio_selecionada or '' }}">
-      </div>
-
-      <div class="painel-filtro-campo" style="max-width:160px;">
-        <label for="data_fim">Data fim</label>
-        <input type="date" id="data_fim" name="data_fim" class="input-compact"
-               value="{{ data_fim_selecionada or '' }}">
-      </div>
-
       <div class="painel-filtro-campo" style="flex:none; align-self:flex-end;">
         <button type="submit" class="btn" title="Filtrar">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -99,6 +87,7 @@
     </form>
 
     <!-- ÁREA DAS COLUNAS -->
+    {% block grid %}
     {% if somente_visualizacao %}
     <div class="alert" style="margin:1.5rem 2rem 0;">
       Seu usuário ainda não tem um perfil de acesso definido, você pode consultar as solicitações, mas não interagir com elas.
@@ -230,6 +219,7 @@
       {% endif %}
 
     </div>
+    {% endblock %}
 
     <!-- MODAL DE ENTREGA -->
     <div id="modal-entrega" class="modal-entrega" style="display:none;">
@@ -330,12 +320,13 @@
   });
 
   // Ajusta o número de colunas do painel conforme o perfil do usuário logado
-  document.addEventListener('DOMContentLoaded', function () {
+  function aplicarColunasGrid() {
     const grid = document.querySelector('.painel-grid[data-cols]');
     if (grid) {
       grid.style.gridTemplateColumns = `repeat(${grid.dataset.cols}, 1fr)`;
     }
-  });
+  }
+  document.addEventListener('DOMContentLoaded', aplicarColunasGrid);
 
   // Selects customizados dos filtros (tipo de serviço / etapa) - ao
   // escolher uma opção, grava no input escondido e já submete o form.
@@ -420,7 +411,7 @@
   }
 
   // Destacar linhas "Atendido" que têm itens disponíveis (uma por vez, para não estourar conexões)
-  document.addEventListener('DOMContentLoaded', function () {
+  function iniciarVerificacaoAtendidos() {
     const linhas = Array.from(document.querySelectorAll('.linha-atendida'));
 
     function verificarLinha(index) {
@@ -445,6 +436,29 @@
     }
 
     verificarLinha(0);
-  });
+  }
+  document.addEventListener('DOMContentLoaded', iniciarVerificacaoAtendidos);
+
+  // Auto-refresh do painel (tempo real) - troca só o grid das 3 colunas,
+  // preserva os filtros atuais da URL. Não atualiza se o modal de entrega
+  // estiver aberto, pra não interromper o usuário no meio de uma ação.
+  const POLL_INTERVALO_MS = 10000;
+  function atualizarPainel() {
+    const modal = document.getElementById('modal-entrega');
+    if (modal && modal.style.display === 'flex') return;
+    const params = new URLSearchParams(window.location.search);
+    fetch('/painel/dados?' + params.toString())
+      .then(r => r.text())
+      .then(html => {
+        const grid = document.querySelector('.painel-grid');
+        if (grid) {
+          grid.outerHTML = html;
+          aplicarColunasGrid();
+          iniciarVerificacaoAtendidos();
+        }
+      })
+      .catch(err => console.error('Erro ao atualizar painel:', err));
+  }
+  setInterval(atualizarPainel, POLL_INTERVALO_MS);
 </script>
 {% endblock %}

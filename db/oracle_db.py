@@ -4,6 +4,7 @@ Acesso ao Oracle (Sapiens). Querys estruturadas para o app Acompanha Pedido, tod
 """
 
 import os
+import time
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -15,19 +16,20 @@ ORACLE_PASSWORD = os.environ.get("ORACLE_PASSWORD", "")
 ORACLE_CLIENT_LIB_DIR = os.environ.get("ORACLE_CLIENT_LIB_DIR") or None
 
 _oracle_client_iniciado = False
+_pool = None
 
 def get_connection():
     """
     Abre conexão Oracle em modo thick
     """
-    global _oracle_client_iniciado
+    global _oracle_client_iniciado, _pool
     import oracledb
     if not _oracle_client_iniciado:
         oracledb.init_oracle_client(lib_dir=ORACLE_CLIENT_LIB_DIR)
         _oracle_client_iniciado = True
-    return oracledb.connect(
-        user=ORACLE_USER, password=ORACLE_PASSWORD, dsn=ORACLE_DSN
-    )
+    if _pool is None:
+        _pool = oracledb.SessionPool(user=ORACLE_USER, password=ORACLE_PASSWORD, dsn=ORACLE_DSN, min=2, max=10, increment=1)
+    return _pool.acquire()
 
 # ---------------------------------------------------------------------
 # Autenticação - identifica o usuário pelo código do Sapiens (por enquanto)
@@ -130,25 +132,33 @@ SQL_SOLICITACOES = """
                     AND s.usu_datsol >= sysdate-180
 """
 
+_cache_tipos_servico = {"dados": None, "expira": 0}
+
 def get_tipos_servico():
     """Lista (código, descrição) de usu_ttipser - para o filtro."""
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT usu_codtsv, usu_destsv FROM sapiens.usu_ttipser ORDER BY usu_destsv")
-    tipos = cur.fetchall()
-    conn.close()
-    return tipos
+    if _cache_tipos_servico["dados"] is None or time.time() > _cache_tipos_servico["expira"]:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT usu_codtsv, usu_destsv FROM sapiens.usu_ttipser ORDER BY usu_destsv")
+        _cache_tipos_servico["dados"] = cur.fetchall()
+        _cache_tipos_servico["expira"] = time.time() + 600
+        conn.close()
+    return _cache_tipos_servico["dados"]
+
+_cache_etapas = {"dados": None, "expira": 0}
 
 def get_etapas():
     """Lista (código, descrição) de usu_tetppro - para o filtro."""
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT usu_codetp, usu_desetp FROM sapiens.usu_tetppro ORDER BY usu_desetp")
-    etapas = cur.fetchall()
-    conn.close()
-    return etapas
+    if _cache_etapas["dados"] is None or time.time() > _cache_etapas["expira"]:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT usu_codetp, usu_desetp FROM sapiens.usu_tetppro ORDER BY usu_desetp")
+        _cache_etapas["dados"] = cur.fetchall()
+        _cache_etapas["expira"] = time.time() + 600
+        conn.close()
+    return _cache_etapas["dados"]
 
-def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None, numped=None, numsol=None, data_inicio=None, data_fim=None):
+def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None, numped=None, numsol=None):
     """
     Retorna as solicitação já separadas por etapa (solicitado / em
     separação / atendido), prontas para o painel.
@@ -176,12 +186,6 @@ def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None, n
     if numsol:
         sql += " and s.usu_numsol = :numsol"
         binds["numsol"] = int(numsol)
-    if data_inicio:
-        sql += " and s.usu_datsol >= TO_DATE(:data_inicio, 'YYYY-MM-DD')"
-        binds["data_inicio"] = data_inicio
-    if data_fim:
-        sql += " and s.usu_datsol <= TO_DATE(:data_fim, 'YYYY-MM-DD')"
-        binds["data_fim"] = data_fim
 
     sql += " ORDER BY s.usu_datsol"
 
@@ -887,6 +891,32 @@ def produto_ja_esta_no_pedido(codemp, codfil, numped, codpro):
     conn.close()
     return count > 0
 
+SQL_ITEM_SOLICITACAO_POR_CODPRO = """
+                SELECT usu_seqite, usu_seqipd, usu_qtdsol
+                FROM sapiens.usu_t120sit
+                WHERE usu_codemp=:codemp
+                AND usu_codfil=:codfil
+                AND usu_numsol=:numsol
+                AND usu_codpro=:codpro
+                AND usu_sitite <> 3
+                ORDER BY CASE WHEN usu_sitite IN (1,2) THEN 0 ELSE 1 END, usu_seqite
+                FETCH FIRST 1 ROW ONLY
+"""
+
+def get_item_solicitacao_por_codpro(codemp, codfil, numsol, codpro):
+    """Item já existente na solicitação (T120SIT) pra esse produto, não
+    cancelado - usado por Inserir peça/Trocar item pra decidir entre
+    incluir linha nova ou aumentar a quantidade da linha existente."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_ITEM_SOLICITACAO_POR_CODPRO, codemp=codemp, codfil=codfil, numsol=numsol, codpro=codpro)
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    seqite, seqipd, qtdsol = row
+    return {"seqite": seqite, "seqipd": seqipd, "qtd_solicitada": _fmt_qtd(qtdsol)}
+
 # ---------------------------------------------------------------------
 # Inserir item novo na solicitação (T120SIT) - usado por Inserir peça e
 # pela segunda metade da Troca. usu_seqipd vem da resposta do webservice
@@ -935,6 +965,26 @@ def inserir_item_solicitacao(codemp, codfil, numsol, numped, seqipd, codpro, des
     conn.commit()
     conn.close()
     return seqite
+
+SQL_ADICIONAR_QTD_ITEM_SOLICITACAO = """
+                UPDATE sapiens.usu_t120sit
+                    SET usu_qtdsol = usu_qtdsol + :qtd,
+                        usu_qtdabe = usu_qtdabe + :qtd
+                WHERE usu_codemp=:codemp
+                AND usu_codfil=:codfil
+                AND usu_numsol=:numsol
+                AND usu_seqite=:seqite
+"""
+
+def adicionar_qtd_item_solicitacao(codemp, codfil, numsol, seqite, qtd):
+    """Aumenta a quantidade de um item que já existe na solicitação (em vez
+    de inserir linha nova) - usado quando o produto já está no pedido/
+    solicitação e o usuário pede mais desse mesmo item."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_ADICIONAR_QTD_ITEM_SOLICITACAO, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite, qtd=qtd)
+    conn.commit()
+    conn.close()
 
 # ---------------------------------------------------------------------
 # NOVO - Lógica de Pedido na loja (RTL, empresa 2) e solicitação de compra
@@ -1152,7 +1202,10 @@ def get_item_para_conferencia(codemp, codfil, numsol, codpro):
 SQL_CONFERIR_ITEM_SOLICITACAO = """
                 UPDATE sapiens.USU_T120SIT
                     SET usu_qtdate = usu_qtdate + :qtdcon,
-                        usu_qtdabe = usu_qtdabe - :qtdcon
+                        usu_qtdabe = usu_qtdabe - :qtdcon,
+                        usu_usucon = :usucon,
+                        usu_datcon = :datcon,
+                        usu_horcon = :horcon
                 WHERE usu_codemp=:codemp 
                 AND usu_codfil=:codfil
                 AND usu_numsol=:numsol
@@ -1176,14 +1229,16 @@ SQL_RESERVAR_ITEM_PEDIDO = """
                 AND seqipd = :seqipd
 """
 
-def conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, qtdcon):
+def conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, qtdcon, usuario):
     """3 UPDATEs em sequência - `item` é o dict que get_item_para_conferencia
     devolveu (seqite/seqipd/numped já vêm de lá)."""
     conn = get_connection()
     cur = conn.cursor()
+    agora = datetime.now()
+    horcon = agora.hour * 3600 + agora.minute * 60 + agora.second
     cur.execute(
         SQL_CONFERIR_ITEM_SOLICITACAO,
-        qtdcon=qtdcon, codemp=codemp, codfil=codfil, numsol=numsol, seqite=item["seqite"],
+        qtdcon=qtdcon, codemp=codemp, codfil=codfil, numsol=numsol, seqite=item["seqite"], usucon=usuario, datcon=agora, horcon=horcon, 
     )
     cur.execute(
         SQL_RESERVAR_ESTOQUE,
@@ -1196,6 +1251,26 @@ def conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, qtdcon):
     conn.commit()
     conn.close()
     return True
+
+SQL_ATUALIZAR_SITSOL_ATENDIDO = """
+                    UPDATE sapiens.USU_T120SDG
+                        SET usu_sitsol = 4,
+                            usu_datcon = :datcon,
+                            usu_horcon = :horcon
+                    WHERE usu_codemp = :codemp
+                    AND usu_codfil = :codfil
+                    AND usu_numsol = :numsol    
+"""
+
+def atualizar_situacao_atendida(codemp, codfil, numsol):
+    "Marca a solicitação na tabela USU_T120SDG como atendida - chamado após a conferência"
+    conn = get_connection()
+    cur = conn.cursor()
+    agora = datetime.now()
+    horcon = agora.hour * 60 + agora.minute
+    cur.execute(SQL_ATUALIZAR_SITSOL_ATENDIDO, codemp=codemp, codfil=codfil, numsol=numsol, datcon=agora, horcon=horcon)
+    conn.commit()
+    conn.close()
 
 SQL_FORNECEDOR_FILIAL = """
                     SELECT filfor FROM sapiens.E070FIL
@@ -1372,15 +1447,16 @@ def atualizar_entrega_e120sit(codemp, codfil, numsol, seqite, qtd, usuario, datm
     """UPDATE USU_T120SIT após entrega."""
     conn = get_connection()
     cur = conn.cursor()
-    hora = datetime.now().strftime("%H:%M:%S")
-    
+    agora = datetime.now()
+    hora = agora.hour * 60 + agora.minute
+
     SQL = """
-        UPDATE sapiens.USU_T120SIT SET 
-            usu_qtdmov = usu_qtdmov + :qtd, 
-            usu_usuent = :usuario, 
-            usu_datent = :datent, 
-            usu_horent = :horent 
-        WHERE usu_codemp = :codemp 
+        UPDATE sapiens.USU_T120SIT SET
+            usu_qtdmov = usu_qtdmov + :qtd,
+            usu_usuent = :usuario,
+            usu_datent = :datent,
+            usu_horent = :horent
+        WHERE usu_codemp = :codemp
         AND usu_codfil = :codfil 
         AND usu_numsol = :numsol 
         AND usu_seqite = :seqite

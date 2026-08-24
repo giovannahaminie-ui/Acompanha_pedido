@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import wraps
 import os
 
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, current_app
 from dotenv import load_dotenv
 
 from db import local_db, oracle_db, pedido_ws
@@ -96,23 +96,21 @@ def selecao():
 # ---------------------------------------------------------------------
 # Painel principal - tipo de serviço e etapa são usados como filtros opcionais
 # ---------------------------------------------------------------------
-@app.route("/painel")
-@login_obrigatorio
-def painel():
+def _contexto_painel():
+    """Monta o contexto do painel (dados do Oracle + visibilidade por
+    perfil) - usado tanto pela página cheia quanto pelo fragmento de
+    auto-refresh (/painel/dados)."""
     filtro = session.get("filtro")
     if not filtro:
-        return redirect(url_for("selecao"))
+        return None
 
     tipo_servico = request.args.get("tipo_servico") or None
     etapa = request.args.get("etapa") or None
     numped = request.args.get("numped") or None
     numsol = request.args.get("numsol") or None
-    data_inicio = request.args.get("data_inicio") or None
-    data_fim = request.args.get("data_fim") or None
     dados = oracle_db.get_solicitacoes(
         empresa=filtro.get("empresa"), filial=filtro.get("filial"),
         tipo_servico=tipo_servico, etapa=etapa, numped=numped, numsol=numsol,
-        data_inicio=data_inicio, data_fim=data_fim,
     )
 
     nome_empresa = dict(EMPRESAS).get(int(filtro["empresa"]), "")
@@ -139,8 +137,7 @@ def painel():
         somente_visualizacao = False
     num_colunas_visiveis = sum([mostrar_solicitado, mostrar_separacao, mostrar_atendido]) or 1
 
-    return render_template(
-        "painel.html",
+    return dict(
         contexto=contexto,
         solicitados=dados["solicitados"],
         em_separacao=dados["em_separacao"],
@@ -154,10 +151,34 @@ def painel():
         tipo_servico_selecionado=tipo_servico, etapa_selecionada=etapa,
         tipo_servico_nome=tipo_servico_nome, etapa_nome=etapa_nome,
         numped_selecionado=numped, numsol_selecionado=numsol,
-        data_inicio_selecionada=data_inicio, data_fim_selecionada=data_fim,
         data_hoje=datetime.now().strftime("%d/%m/%Y"),
         hora_agora=datetime.now().strftime("%H:%M"),
     )
+
+def _renderizar_block(template_nome, block_nome, **contexto):
+    """Renderiza só um {% block %} de um template - evita precisar de um
+    arquivo .html separado só pro fragmento de auto-refresh do painel."""
+    template = current_app.jinja_env.get_template(template_nome)
+    ctx = template.new_context(contexto)
+    return "".join(template.blocks[block_nome](ctx))
+
+@app.route("/painel")
+@login_obrigatorio
+def painel():
+    ctx = _contexto_painel()
+    if ctx is None:
+        return redirect(url_for("selecao"))
+    return render_template("painel.html", **ctx)
+
+@app.route("/painel/dados")
+@login_obrigatorio
+def painel_dados():
+    """Só o fragmento das 3 colunas (bloco 'grid' de painel.html) - usado
+    pelo auto-refresh via JS a cada 10s."""
+    ctx = _contexto_painel()
+    if ctx is None:
+        return "", 401
+    return _renderizar_block("painel.html", "grid", **ctx)
 
 # ---------------------------------------------------------------------
 # Assumir solicitação (Solicitado -> Em separação)
@@ -172,7 +193,7 @@ def assumir_solicitacao(codemp, codfil, numsol):
         dados = oracle_db.verificar_login(usuario)
         if dados:
             oracle_db.assumir_solicitacao(codemp, codfil, numsol, dados["usuario"])
-            return redirect(url_for("painel"))
+            return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
         return render_template(
             "assumir_solicitacao.html", numped=cabecalho["numped"], numsol=numsol,
             solicitante=cabecalho["solicitante"], erro="Código de usuário inválido",
@@ -187,7 +208,7 @@ def assumir_solicitacao(codemp, codfil, numsol):
 # ---------------------------------------------------------------------
 def _render_detalhe(
     codemp, codfil, numsol,
-    erro_inserir=None, painel_aberto=False,
+    erro_inserir=None, painel_aberto=False, avisar_alteracao=None,
     erro_conf=None, sucesso_conf=None, painel_conf_aberto=False,
 ):
     dados = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
@@ -204,6 +225,7 @@ def _render_detalhe(
         codemp=codemp, codfil=codfil, numsol=numsol,
         pendentes_inserir=pendentes_inserir,
         erro_inserir=erro_inserir,
+        avisar_alteracao=avisar_alteracao,
         painel_inserir_aberto=painel_aberto or bool(pendentes_inserir),
         itens_conferencia=itens_conferencia,
         pendentes_conferencia=pendentes_conferencia,
@@ -289,8 +311,10 @@ def inserir_peca_adicionar(codemp, codfil, numsol):
         qtd = float(request.form.get("qtd", "0").replace(",", "."))
     except ValueError:
         qtd = 0
+    confirmar_alteracao = request.form.get("confirmar_alteracao") == "1"
 
     erro = None
+    avisar_alteracao = None
     pendentes_atuais = local_db.listar_itens_pendentes(codemp, codfil, numsol)
     if not codpro_novo:
         erro = "Informe o código do produto."
@@ -313,16 +337,28 @@ def inserir_peca_adicionar(codemp, codfil, numsol):
                 erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
             elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, cabecalho["numped"], produto["codpro"]):
                 erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
-            elif oracle_db.produto_ja_esta_no_pedido(codemp, codfil, cabecalho["numped"], produto["codpro"]):
-                erro = f"Produto {codpro_novo} já existe nesse pedido."
         if not erro:
-            local_db.adicionar_item_pendente(
-                codemp, codfil, numsol, produto["codpro"], produto["descricao"],
-                qtd, produto["preco"], produto["codtab"], session["usuario"],
-            )
+            item_existente = oracle_db.get_item_solicitacao_por_codpro(codemp, codfil, numsol, produto["codpro"])
+            if item_existente and not confirmar_alteracao:
+                avisar_alteracao = {
+                    "codpro": produto["codpro"], "descricao": produto["descricao"],
+                    "qtd_atual": item_existente["qtd_solicitada"], "qtd_adicionar": qtd,
+                }
+            elif item_existente:
+                local_db.adicionar_item_pendente(
+                    codemp, codfil, numsol, produto["codpro"], produto["descricao"],
+                    qtd, produto["preco"], produto["codtab"], session["usuario"],
+                    is_alteracao=True, seqite_existente=item_existente["seqite"],
+                    seqipd_existente=item_existente["seqipd"],
+                )
+            else:
+                local_db.adicionar_item_pendente(
+                    codemp, codfil, numsol, produto["codpro"], produto["descricao"],
+                    qtd, produto["preco"], produto["codtab"], session["usuario"],
+                )
 
-    if erro:
-        return _render_detalhe(codemp, codfil, numsol, erro_inserir=erro, painel_aberto=True)
+    if erro or avisar_alteracao:
+        return _render_detalhe(codemp, codfil, numsol, erro_inserir=erro, avisar_alteracao=avisar_alteracao, painel_aberto=True)
     return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/inserir/remover/<int:id_pendente>", methods=["POST"])
@@ -341,14 +377,22 @@ def inserir_peca_confirmar(codemp, codfil, numsol):
 
     try:
         for item in pendentes:
-            seqipd_novo = pedido_ws.incluir_item_pedido(
-                codemp, codfil, cabecalho["numped"], item["codpro"], item["qtd"],
-                item["preco"], item["codtab"], session["usuario"],
-            )
-            oracle_db.inserir_item_solicitacao(
-                codemp, codfil, numsol, cabecalho["numped"], seqipd_novo, item["codpro"],
-                item["descricao"], item["qtd"], session["usuario"],
-            )
+            if item["is_alteracao"]:
+                pedido_ws.adicionar_qtd_item_pedido(
+                    codemp, codfil, cabecalho["numped"], item["seqipd_existente"], item["qtd"], session["usuario"],
+                )
+                oracle_db.adicionar_qtd_item_solicitacao(
+                    codemp, codfil, numsol, item["seqite_existente"], item["qtd"],
+                )
+            else:
+                seqipd_novo = pedido_ws.incluir_item_pedido(
+                    codemp, codfil, cabecalho["numped"], item["codpro"], item["qtd"],
+                    item["preco"], item["codtab"], session["usuario"],
+                )
+                oracle_db.inserir_item_solicitacao(
+                    codemp, codfil, numsol, cabecalho["numped"], seqipd_novo, item["codpro"],
+                    item["descricao"], item["qtd"], session["usuario"],
+                )
             local_db.remover_item_pendente(item["id"])
     except pedido_ws.PedidoWebserviceError as e:
         return _render_detalhe(codemp, codfil, numsol, erro_inserir=f"Falha ao incluir peça: {e}", painel_aberto=True)
@@ -413,9 +457,12 @@ def conferencia_confirmar(codemp, codfil, numsol):
         filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
         coddep = oracle_db.get_coddep_esperado(codemp, filexe)
         item["codpro"] = codpro
-        oracle_db.conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, p["qtd"])
+        oracle_db.conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, p["qtd"], p["usuario"])
         local_db.remover_item_conferencia_pendente(p["id"])
         sucesso_count += 1
+
+    if sucesso_count:
+        oracle_db.atualizar_situacao_atendida(codemp, codfil, numsol)
 
     sucesso = f"{sucesso_count} item(ns) conferido(s) e reservado(s) com sucesso" if sucesso_count else None
     return _render_detalhe(codemp, codfil, numsol, erro_conf=erro, sucesso_conf=sucesso, painel_conf_aberto=True)
@@ -444,6 +491,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
     diferenca_preco = None
     alerta_preco = False
     mostrar_confirmacao = False
+    item_existente_solicitacao = None
     autorizado_por = request.form.get("autorizado_por", "").strip()
 
     if request.method == "POST":
@@ -470,6 +518,9 @@ def trocar_item(codemp, codfil, numsol, seqite):
                     erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
                 elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], produto["codpro"]):
                     erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
+
+        if not erro and produto:
+            item_existente_solicitacao = oracle_db.get_item_solicitacao_por_codpro(codemp, codfil, numsol, produto["codpro"])
 
         # Produto passou por todas as checagens - mostra a etapa de
         # confirmação mesmo que a autorização de preço ainda falte (ver
@@ -509,14 +560,23 @@ def trocar_item(codemp, codfil, numsol, seqite):
                         if preco_substituido is not None and preco_substituido > produto["preco"]
                         else None
                     ) 
-                    seqipd_novo = pedido_ws.incluir_item_pedido(
-                        codemp, codfil, item["numped"], produto["codpro"], qtd,
-                        preco_incluir, produto["codtab"], session["usuario"],
-                    )
-                    seqite_novo = oracle_db.inserir_item_solicitacao(
-                        codemp, codfil, numsol, item["numped"], seqipd_novo, produto["codpro"],
-                        produto["descricao"], qtd, session["usuario"], veio_de_troca=True,
-                    )
+                    if item_existente_solicitacao:
+                        pedido_ws.adicionar_qtd_item_pedido(
+                            codemp, codfil, item["numped"], item_existente_solicitacao["seqipd"], qtd, session["usuario"],
+                        )
+                        oracle_db.adicionar_qtd_item_solicitacao(
+                            codemp, codfil, numsol, item_existente_solicitacao["seqite"], qtd,
+                        )
+                        seqite_novo = item_existente_solicitacao["seqite"]
+                    else:
+                        seqipd_novo = pedido_ws.incluir_item_pedido(
+                            codemp, codfil, item["numped"], produto["codpro"], qtd,
+                            preco_incluir, produto["codtab"], session["usuario"],
+                        )
+                        seqite_novo = oracle_db.inserir_item_solicitacao(
+                            codemp, codfil, numsol, item["numped"], seqipd_novo, produto["codpro"],
+                            produto["descricao"], qtd, session["usuario"], veio_de_troca=True,
+                        )
                     if alerta_preco:
                         # Mensagem enxuta - usu_obsite tem limite de 99
                         # caracteres (VARCHAR2(99)).
@@ -535,7 +595,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
         "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
         item=item, item_pedido=item_pedido, produto=produto, qtd=qtd, codpro_novo=codpro_novo, erro=erro,
         diferenca_preco=diferenca_preco, alerta_preco=alerta_preco, autorizado_por=autorizado_por,
-        mostrar_confirmacao=mostrar_confirmacao,
+        mostrar_confirmacao=mostrar_confirmacao, item_existente_solicitacao=item_existente_solicitacao,
     )
 
 def _dados_e_sugestao_loja(codemp, codfil, item):
@@ -967,7 +1027,7 @@ def entrega_item(codemp, codfil, numsol):
                         codemp=codemp, codfil=codfil, numsol=numsol,
                         detalhes=f"Entrega de {len(itens_selecionados)} item(ns)"
                     )
-                    return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+                    return redirect(url_for("painel"))
                 else:
                     erro = mensagem_retorno or "Falha na transferência de estoque"
             except Exception as e:

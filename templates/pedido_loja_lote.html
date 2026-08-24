@@ -48,6 +48,7 @@
           (function () {
             const campos = document.querySelectorAll('.qtd-pedido-loja');
             const botaoConfirmar = document.getElementById('btn-confirmar-pedido-loja');
+            if (campos.length) campos[0].focus();
 
             function algumInsuficiente() {
               return Array.from(campos).some(function (campo) {

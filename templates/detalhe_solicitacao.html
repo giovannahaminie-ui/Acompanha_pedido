@@ -219,8 +219,14 @@
       const btnToggle = document.getElementById(btnToggleId);
       const btnRecolher = document.getElementById(btnRecolherId);
       if (painel && btnToggle) {
-        btnToggle.addEventListener('click', function () {
+        btnToggle.addEventListener('click', function () 
+        {
           painel.classList.toggle('aberto');
+          if(painel.classList.contains('aberto')) {
+            const campoFoco =
+            painel.querySelector('[autofocus]');
+            if (campoFoco) campoFoco.focus();
+          }
         });
       }
       if (conteudo && btnRecolher) {
@@ -234,6 +240,14 @@
     configurarPainelRecolhivel('painel-inserir-peca', 'btn-toggle-inserir-peca', 'painel-inserir-conteudo', 'btn-recolher-inserir');
     configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'painel-conferencia-conteudo', 'btn-recolher-conferencia');
   });
+
+  function fecharModalAlteracao() {
+    document.getElementById('modal-alteracao').style.display = 'none';
+  }
+  function confirmarModalAlteracao() {
+    document.getElementById('confirmar_alteracao_inserir').value = '1';
+    document.getElementById('form-inserir-peca').submit();
+  }
 
 </script>
 
@@ -292,7 +306,10 @@
       <div class="pend-item">
         <div class="pend-item-info">
           <div class="pend-item-titulo">{{ p.codpro }} — {{ p.descricao }}</div>
-          <div class="pend-item-detalhe">Qtd: {{ p.qtd }} · Preço unit.: {{ '%.2f'|format(p.preco) }}</div>
+          <div class="pend-item-detalhe">
+            Qtd: {{ p.qtd }} · Preço unit.: {{ '%.2f'|format(p.preco) }}
+            {% if p.is_alteracao %}· <strong>alteração (soma à qtd. já existente)</strong>{% endif %}
+          </div>
         </div>
         <form method="POST" action="{{ url_for('inserir_peca_remover', codemp=codemp, codfil=codfil, numsol=numsol, id_pendente=p.id) }}">
           <button type="submit" class="btn-remover-pend" title="Remover" aria-label="Remover">
@@ -305,14 +322,15 @@
     {% endif %}
 
     <form method="POST" action="{{ url_for('inserir_peca_adicionar', codemp=codemp, codfil=codfil, numsol=numsol) }}" id="form-inserir-peca">
-      <div style="display:flex; gap:0.75rem;">
+      <input type="hidden" name="confirmar_alteracao" id="confirmar_alteracao_inserir" value="">
+            <div style="display:flex; gap:0.75rem; align-items:flex-end;">
         <div class="field" style="width: 6rem; flex:none;">
         <label for="qtd_inserir">Quantidade</label>
-        <input type="number" id="qtd_inserir" name="qtd" step="any" min="1" value="1" required style="width: 100%;">
+        <input type="number" id="qtd_inserir" name="qtd" step="any" min="1" value="{{ avisar_alteracao.qtd_adicionar if avisar_alteracao else 1 }}" required autofocus style ="width: 100%;">
       </div>
-      <div class="field" style="flex:1;">
+      <div class="field" style="width: 16rem; flex:none;">
         <label for="codpro_inserir">Código do produto novo</label>
-        <input type="text" id="codpro_inserir" name="codpro_novo" required autofocus style="text-transform: uppercase; width: 100%;" oninput="this.value = this.value.toUpperCase()">
+        <input type="text" id="codpro_inserir" name="codpro_novo" value="{{ avisar_alteracao.codpro if avisar_alteracao else '' }}" required style="text-transform: uppercase; width: 100%;" oninput="this.value = this.value.toUpperCase()">
         </div>
       </div>
       <button type="submit" class="btn btn-small">+ Inserir item</button>
@@ -327,6 +345,77 @@
   </div>
 </div>
 
+<div id="modal-alteracao" class="modal-alteracao{{ ' aberto' if avisar_alteracao else '' }}">
+  <div class="modal-alteracao-content">
+    <div class="modal-alteracao-icone">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+    </div>
+    <h2>Item já existe na solicitação</h2>
+    <p>
+      {% if avisar_alteracao %}
+        Produto <strong>{{ avisar_alteracao.codpro }}</strong> ({{ avisar_alteracao.descricao }}) já está nessa solicitação — qtd. atual: <strong>{{ avisar_alteracao.qtd_atual }}</strong>.
+        Deseja continuar e adicionar mais <strong>{{ avisar_alteracao.qtd_adicionar }}</strong> unidade(s) a esse item?
+      {% endif %}
+    </p>
+    <div class="modal-alteracao-acoes">
+      <button type="button" class="btn" onclick="fecharModalAlteracao()">Cancelar</button>
+      <button type="button" class="btn-primary" onclick="confirmarModalAlteracao()">Continuar e adicionar</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-status-conf" class="modal-alteracao{{ ' aberto' if (erro_conf or sucesso_conf) else '' }}">
+  <div class="modal-alteracao-content">
+    <div class="modal-alteracao-icone {{ 'modal-icone-erro' if erro_conf else 'modal-icone-sucesso' }}">
+      {% if erro_conf %}
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      {% else %}
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>
+      {% endif %}
+    </div>
+    <h2>{{ 'Erro na conferência' if erro_conf else 'Conferência realizada' }}</h2>
+    <p>{{ erro_conf or sucesso_conf }}</p>
+    <div class="modal-alteracao-acoes">
+      <button type="button" class="btn-primary" style="flex:1;" onclick="document.getElementById('modal-status-conf').classList.remove('aberto')">OK</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .modal-alteracao {
+    display: none;
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(10, 17, 40, 0.55);
+    align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .modal-alteracao.aberto { display: flex; }
+  .modal-alteracao-content {
+    background: var(--white); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    padding: 2rem; max-width: 420px; width: 90%; text-align: center;
+  }
+  .modal-alteracao-icone {
+    width: 48px; height: 48px; border-radius: 50%; margin: 0 auto 1rem;
+    background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-border);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal-alteracao-icone.modal-icone-erro { background: var(--red-soft); color: var(--red-600); border-color: var(--red-border); }
+  .modal-alteracao-icone.modal-icone-sucesso { background: var(--emerald-soft); color: var(--emerald); border-color: var(--emerald-border); }
+  .modal-alteracao-content h2 {
+    margin: 0 0 0.6rem; font-size: 1.15rem; color: var(--navy-900);
+  }
+  .modal-alteracao-content p {
+    margin: 0 0 1.5rem; color: var(--text-dim); font-size: 0.92rem; line-height: 1.5;
+  }
+  .modal-alteracao-acoes {
+    display: flex; gap: 0.75rem;
+  }
+  .modal-alteracao-acoes .btn, .modal-alteracao-acoes .btn-primary {
+    flex: 1; justify-content: center;
+  }
+</style>
+
 <div id="painel-conferencia" class="painel-inserir{{ ' aberto' if painel_conf_aberto else '' }}">
   <hr class="divisor-painel">
   <div class="painel-inserir-cabecalho">
@@ -337,15 +426,41 @@
   </div>
 
   <div id="painel-conferencia-conteudo" class="painel-conteudo">
-    {% if erro_conf %}
-      <div class="alert">{{ erro_conf }}</div>
-    {% endif %}
-    {% if sucesso_conf %}
-      <div class="alert" style="background:var(--emerald-soft); border-color:var(--emerald-border);">{{ sucesso_conf }}</div>
-    {% endif %}
+
+{% if pendentes_conferencia %}
+<div class="lista-pendentes">
+  {% for p in pendentes_conferencia %}
+  <div class="pend-item">
+    <div class="pend-item-info">
+      <div class="pend-item-titulo">{{ p.codbar }}</div>
+      <div class="pend-item-detalhe">Qtd: {{ p.qtd }}</div>
+    </div>
+    <form method="POST" action="{{ url_for('conferencia_remover', codemp=codemp, codfil=codfil, numsol=numsol, id_pendente=p.id) }}">
+      <button type="submit" class="btn-remover-pend" title="Remover" aria-label="Remover">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+      </button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('conferencia_adicionar', codemp=codemp, codfil=codfil, numsol=numsol) }}" id="form-conferencia">
+  <div style="display:flex; gap:0.75rem; align-items:flex-end;">
+    <div class="field" style="width: 9rem; flex:none;">
+      <label for="qtdcon">Quantidade conferida</label>
+      <input type="number" id="qtdcon" name="qtdcon" step="any" min="0.01" required autofocus style="width:100%;">
+    </div>
+    <div class="field" style="width: 16rem; flex:none;">
+      <label for="codbar">Código de barras ou produto</label>
+      <input type="text" id="codbar" name="codbar" required style="text-transform: uppercase; width:100%;" oninput="this.value = this.value.toUpperCase()">
+    </div>
+  </div>
+  <button type="submit" class="btn btn-small">+ Adicionar</button>
+</form>
 
     {% if itens_conferencia %}
-    <div class="table-card" style="margin-bottom:1rem;">
+        <div class="table-card" style="margin-top:1rem; margin-bottom:1rem;">
       <table class="tabela-itens">
         <thead>
           <tr>
@@ -380,36 +495,6 @@
     {% endif %}
 
 {% if pendentes_conferencia %}
-<div class="lista-pendentes">
-  {% for p in pendentes_conferencia %}
-  <div class="pend-item">
-    <div class="pend-item-info">
-      <div class="pend-item-titulo">{{ p.codbar }}</div>
-      <div class="pend-item-detalhe">Qtd: {{ p.qtd }}</div>
-    </div>
-    <form method="POST" action="{{ url_for('conferencia_remover', codemp=codemp, codfil=codfil, numsol=numsol, id_pendente=p.id) }}">
-      <button type="submit" class="btn-remover-pend" title="Remover" aria-label="Remover">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
-      </button>
-    </form>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
-<form method="POST" action="{{ url_for('conferencia_adicionar', codemp=codemp, codfil=codfil, numsol=numsol) }}" id="form-conferencia">
-  <div class="field">
-    <label for="qtdcon">Quantidade conferida</label>
-    <input type="number" id="qtdcon" name="qtdcon" step="any" min="0.01" required>
-  </div>
-  <div class="field">
-    <label for="codbar">Código de barras ou produto</label>
-    <input type="text" id="codbar" name="codbar" required autofocus style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()">
-  </div>
-  <button type="submit" class="btn btn-small">+ Adicionar</button>
-</form>
-
-{% if pendentes_conferencia %}
 <form method="POST" action="{{ url_for('conferencia_confirmar', codemp=codemp, codfil=codfil, numsol=numsol) }}" style="margin-top:0.85rem;">
   <button type="submit" class="btn-primary">Confirmar conferência ({{ pendentes_conferencia|length }})</button>
 </form>
@@ -423,15 +508,13 @@
   <table class="tabela-itens">
     <colgroup>
       <col style="width:5%">
-      <col style="width:5%">
       <col style="width:7%">
-      <col style="width:6%">
+      <col style="width:9%">
+      <col style="width:9%">
       <col style="width:12%">
-      <col style="width:8%">
-      <col style="width:6%">
-      <col style="width:6%">
-      <col style="width:5%"><col style="width:4%"><col style="width:6%"><col style="width:5%"><col style="width:5%"><col style="width:5%">
-      <col style="width:11%">
+      <col style="width:7%">
+      <col style="width:7%"><col style="width:5%"><col style="width:6%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%">
+      <col style="width:9%">
       <col style="width:9%">
     </colgroup>
     <thead>
@@ -440,10 +523,9 @@
         <th rowspan="2" title="Marcar pra solicitar compra (botão &quot;Solicitar compra&quot; acima da tabela)">Solic. compra</th>
         <th rowspan="2">Cód. Fab.</th>
         <th rowspan="2">Produto</th>
-        <th rowspan="2">Descrição (produto)</th>
         <th rowspan="2">Descrição (solicitação)</th>
         <th rowspan="2">Marca</th>
-        <th rowspan="3">Endereço</th>
+        <th rowspan="2">Endereço</th>
         <th colspan="6" class="th-qtd-group" style="text-align:center;">Qtd.</th>
         <th rowspan="2">Saldo por depósito</th>
         <th rowspan="2">Ações</th>
@@ -480,8 +562,16 @@
             {% endif %}
           </span>
         </td>
-        <td class="mono codpro-padrao">{{ item.codpro1 }}</td>
-        <td style="white-space:normal;">{{ item.descricao }}</td>
+        <td class="mono codpro-padrao">
+          <span style="display:inline-flex; align-items:center; gap:4px;">
+            {{ item.codpro1 }}
+            {% if item.codpro1 %}
+            <button type="button" class="btn-copiar-codfab" data-copiar="{{ item.codpro1 }}" title="Copiar código">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </button>
+            {% endif %}
+          </span>
+        </td>
         <td style="color:var(--text-dim);">{{ item.descricao_item or '—' }}</td>
         <td>{{ item.marca }}</td>
         <td class="mono" style="white-space:nowrap;">{{ item.endereco or '—' }}</td>

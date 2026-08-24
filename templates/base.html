@@ -60,6 +60,7 @@
   </script>
   {% endif %}
   {% if perfil_logado == 'G' and request.endpoint == 'painel' %}
+
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const dropdown = document.querySelector('.admin-dropdown');
@@ -72,6 +73,26 @@
         dropdown.classList.remove('open');
       });
     });
+  </script>
+  {% endif %}
+
+  {% if nome_usuario_logado %}
+  <script>
+    //Logout automático por inatividade (1 min sem interação com a tela).
+    (function (){
+      const LIMITE_INATIVIDADE_MS = 60000;
+      let timer;
+      function reiniciarTimer() {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          window.location.href = "{{ url_for('logout')}}";
+        }, LIMITE_INATIVIDADE_MS);
+      }
+      ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(function (evento) {
+        document.addEventListener(evento, reiniciarTimer, {passive: true});
+      });
+      reiniciarTimer();
+    })();
   </script>
   {% endif %}
 </body>

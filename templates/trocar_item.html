@@ -63,6 +63,12 @@
             </div>
           {% endif %}
 
+          {% if item_existente_solicitacao %}
+            <div class="alert">
+              Este produto já está nessa solicitação (qtd. atual: {{ item_existente_solicitacao.qtd_solicitada }}). Ao confirmar, a quantidade de {{ qtd }} será somada ao item existente, em vez de criar uma linha nova no pedido.
+            </div>
+          {% endif %}
+
           <form method="POST">
             <input type="hidden" name="codpro_novo" value="{{ codpro_novo }}">
             <input type="hidden" name="qtd" value="{{ qtd }}">
@@ -87,11 +93,11 @@
           <form method="POST">
             <div class="field">
               <label for="qtd">Quantidade a trocar</label>
-              <input type="number" id="qtd" name="qtd" step="any" min="0.01" max="{{ item_pedido.qtd_aberta }}" value="{{ qtd if qtd else item_pedido.qtd_aberta }}" required>
+              <input type="number" id="qtd" name="qtd" step="any" min="0.01" max="{{ item_pedido.qtd_aberta }}" value="{{ qtd if qtd else item_pedido.qtd_aberta }}" required autofocus>
             </div>
             <div class="field">
               <label for="codpro_novo">Código do produto novo</label>
-              <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required autofocus style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()">
+              <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()">
             </div>
             <div style="display:flex; gap:0.75rem;">
               <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">
