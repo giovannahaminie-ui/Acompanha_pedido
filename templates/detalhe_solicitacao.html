@@ -213,7 +213,7 @@
     // - a setinha dentro do próprio painel só recolhe o conteúdo (campos/
     //   lista/tabela/botões) - o título e a setinha continuam visíveis, só
     //   a setinha vira pra indicar que tá recolhido.
-    function configurarPainelRecolhivel(painelId, btnToggleId, conteudoId, btnRecolherId) {
+    function configurarPainelRecolhivel(painelId, btnToggleId, conteudoId, btnRecolherId, semItens) {
       const painel = document.getElementById(painelId);
       const conteudo = document.getElementById(conteudoId);
       const btnToggle = document.getElementById(btnToggleId);
@@ -221,12 +221,11 @@
       if (painel && btnToggle) {
         btnToggle.addEventListener('click', function () 
         {
-          painel.classList.toggle('aberto');
-          if(painel.classList.contains('aberto')) {
-            const campoFoco =
-            painel.querySelector('[autofocus]');
-            if (campoFoco) campoFoco.focus();
+          if (semItens && !painel.classList.contains('aberto')) {
+            document.getElementById('modal-sem-conferencia').classList.add('aberto');
+            return;
           }
+          painel.classList.toggle('aberto');
         });
       }
       if (conteudo && btnRecolher) {
@@ -237,8 +236,8 @@
       }
     }
 
-    configurarPainelRecolhivel('painel-inserir-peca', 'btn-toggle-inserir-peca', 'painel-inserir-conteudo', 'btn-recolher-inserir');
-    configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'painel-conferencia-conteudo', 'btn-recolher-conferencia');
+    configurarPainelRecolhivel('painel-inserir-peca', 'btn-toggle-inserir-peca', 'painel-inserir-conteudo', 'btn-recolher-inserir', false);
+    configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'painel-conferencia-conteudo', 'btn-recolher-conferencia', document.getElementById('painel-conferencia').dataset.semItens === 'true');
   });
 
   function fecharModalAlteracao() {
@@ -381,6 +380,46 @@
   </div>
 </div>
 
+<div id="modal-status-inserir" class="modal-alteracao{{ ' aberto' if sucesso_inserir else '' }}">
+  <div class="modal-alteracao-content">
+    <div class="modal-alteracao-icone modal-icone-sucesso">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>
+    </div>
+    <h2>Peça Incluída</h2>
+    <p>{{ sucesso_inserir }}</p>
+    <div class="modal-alteracao-acoes">
+      <button type="button" class="btn-primary" style="flex: 1;" onclick="document.getElementById('modal-status-inserir').classList.remove('aberto')">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-sem-conferencia" class="modal-alteracao">
+  <div class="modal-alteracao-content">
+    <div class="modal-alteracao-icone">
+      <svg width="22" heigth="22" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+    </div>
+    <h2>Nada para conferir</h2>
+    <p>Sem item pendente de conferência nessa solicitação.</p>
+    <div class="modal-alteracao-acoes">
+      <button type="button" class="btn-primary" ctyle="flex:1;" onclick="document.getElementById('modal-sem-conferencia').classList.remove('aberto')">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-status-troca" class="modal-alteracao{{ ' aberto' if sucesso_troca else ''}}">
+  <div class="modal-alteracao-content">
+    <div class="modal-alteracao-icone modal-icone-sucesso">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>
+    </div>
+    <h2>Troca realizada</h2>
+    <p>{{ sucesso_troca }}</p>
+    <div class="modal-alteracao-acoes">
+      <button type="button" class="btn-primary" style="flex: 1;"
+        onclick="document.getElementById('modal-status-troca').classList.remove('aberto')">OK</button>
+    </div>
+  </div>
+</div>
+
 <style>
   .modal-alteracao {
     display: none;
@@ -416,7 +455,7 @@
   }
 </style>
 
-<div id="painel-conferencia" class="painel-inserir{{ ' aberto' if painel_conf_aberto else '' }}">
+<div id="painel-conferencia" class="painel-inserir{{ ' aberto' if painel_conf_aberto else '' }}" data-sem-itens="{{ 'true' if not itens_conferencia else 'false'}}">
   <hr class="divisor-painel">
   <div class="painel-inserir-cabecalho">
     <p class="section-title" style="margin:0;">Conferência com reserva</p>
@@ -490,8 +529,6 @@
         </tbody>
       </table>
     </div>
-    {% else %}
-    <p style="color:var(--text-mute); font-size:0.85rem; margin:0 0 1rem;">Nenhum item em aberto pra conferência nessa solicitação.</p>
     {% endif %}
 
 {% if pendentes_conferencia %}

@@ -5,17 +5,16 @@
   <div class="hero-inner">
 
     <div class="hero-copy">
-      <span class="eyebrow">Passo 2 de 2</span>
+      <span class="eyebrow">Filtros</span>
       <h1>Escolha o que você quer acompanhar.</h1>
       <p class="lead">
-        Filtre por empresa e filial — o tipo de serviço e a etapa você
-        ajusta depois, direto no painel. Você pode trocar essa seleção
+        Filtre por empresa e filial. Você pode trocar essa seleção
         quando quiser sem precisar logar de novo.
       </p>
       <div class="hero-points">
         <div class="hero-point">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          Só a empresa é obrigatória — o resto é opcional
+          Só a empresa é obrigatória, o resto é opcional.
         </div>
         <div class="hero-point">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -27,7 +26,7 @@
     <div class="auth-card">
       <div class="card-brand">RT</div>
       <p class="card-title">Acompanhamento de solicitações</p>
-      <p class="card-subtitle">Selecione os parâmetros desejados para acessar o painel</p>
+      <p class="card-subtitle">Selecione os parâmetros desejados para acessar o painel de solicitações.</p>
 
       <form method="POST">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 1.25rem;">
@@ -37,7 +36,7 @@
             <label>Empresa</label>
             <input type="hidden" name="empresa" id="empresa" value="{{ empresas[0][0] if empresas else '' }}">
             <div class="ux-select-wrapper">
-              <div class="ux-select-trigger">
+              <div class="ux-select-trigger" id="empresa-trigger" tabindex="0">
                 <span class="ux-selected-text">
                   {% if empresas %}{{ empresas[0][0] }} — {{ empresas[0][1] }}{% else %}Selecione{% endif %}
                 </span>
@@ -56,7 +55,7 @@
             <label>Filial</label>
             <input type="hidden" name="filial" id="filial" value="">
             <div class="ux-select-wrapper">
-              <div class="ux-select-trigger">
+              <div class="ux-select-trigger" tabindex="0">
                 <span class="ux-selected-text">Todas as filiais</span>
                 <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
               </div>
@@ -72,7 +71,7 @@
         </div>
 
         <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:0.5rem;">
-          Abrir acompanhamento
+          Continuar
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
       </form>
@@ -108,11 +107,26 @@
           wrapper.classList.remove('open');
         });
       });
+      trigger.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')return;
+        e.preventDefault();
+        const optsArray = Array.from(options);
+        let idx = optsArray.findIndex(opt => opt.classList.contains('selected'));
+        if (e.key === 'ArrowDown' && idx < optsArray.length - 1) idx++;
+        else if (e.key === 'ArrowUp' && idx > 0) idx--;
+        else return;
+        optsArray.forEach(opt => opt.classList.remove('selected'));
+        optsArray[idx].classList.add('selected');
+        selectedText.textContent = optsArray[idx].textContent.trim();
+        hiddenInput.value = optsArray[idx].getAttribute('data-value');
+      });
     });
 
     document.addEventListener('click', () => {
       wrappers.forEach(wrapper => wrapper.classList.remove('open'));
+      
     });
+    document.getElementById('empresa-trigger').focus();
   });
 </script>
 {% endblock %}

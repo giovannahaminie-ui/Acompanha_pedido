@@ -1,10 +1,12 @@
+
+
 {% extends "base.html" %}
 {% block title %}Trocar item{% endblock %}
 {% block content %}
 <div class="hero-screen">
   <div class="hero-inner" style="grid-template-columns: 1fr;">
 
-    <div class="auth-card" style="max-width:600px;">
+    <div class="auth-card" style="max-width:820px;">
       <div class="card-brand">RT</div>
       <p class="card-title">Trocar item</p>
       <p class="card-subtitle">
@@ -18,8 +20,9 @@
         </div>
       {% endif %}
 
-      {% if not item_pedido %}
-        <div class="alert">Item ainda não está vinculado a uma linha do pedido (seqIpd) — não é possível trocar.</div>
+      {% if bloqueado %}
+        {# formulario oculto - item já movimentado, aviso vai no pop up abaixo #}
+        <div class="alert">Este item já teve {{ item.qtd_movimentada }} unidade(s) movimentada(s) (entregue) — não é possível trocar.</div>
       {% else %}
         <p class="field-label">Situação atual no pedido</p>
         <div class="info-cards" style="margin-bottom:1.2rem;">
@@ -30,17 +33,19 @@
 
         {% if mostrar_confirmacao %}
           {# ---- etapa 2: comparação de preço + confirmação ---- #}
-          <div class="field">
-            <label>Produto novo</label>
-            <input type="text" value="{{ produto.codpro }} — {{ produto.descricao }}" disabled>
-          </div>
-          <div class="field">
-            <label>Marca</label>
-            <input type="text" value="{{ produto.marca or '—' }}" disabled>
-          </div>
-          <div class="field">
-            <label>Quantidade a trocar</label>
-            <input type="text" value="{{ qtd }}" disabled>
+          <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:0 1.25rem;">
+            <div class="field">
+              <label>Produto novo</label>
+              <input type="text" value="{{ produto.codpro }} — {{ produto.descricao }}" disabled>
+            </div>
+            <div class="field">
+              <label>Marca</label>
+              <input type="text" value="{{ produto.marca or '—' }}" disabled>
+            </div>
+            <div class="field">
+              <label>Quantidade a trocar</label>
+              <input type="text" value="{{ qtd }}" disabled>
+            </div>
           </div>
 
           {% if alerta_preco %}
@@ -91,6 +96,7 @@
         {% else %}
           {# ---- etapa 1: informar produto novo ---- #}
           <form method="POST">
+          <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 0 1.25rem;">
             <div class="field">
               <label for="qtd">Quantidade a trocar</label>
               <input type="number" id="qtd" name="qtd" step="any" min="0.01" max="{{ item_pedido.qtd_aberta }}" value="{{ qtd if qtd else item_pedido.qtd_aberta }}" required autofocus>
@@ -99,6 +105,7 @@
               <label for="codpro_novo">Código do produto novo</label>
               <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()">
             </div>
+          </div>
             <div style="display:flex; gap:0.75rem;">
               <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">
                 Cancelar
@@ -114,4 +121,59 @@
 
   </div>
 </div>
+
+<div id="modal-bloqueado" class="modal-alteracao{{ ' aberto' if bloqueado else '' }}">
+  <div class="modal-alteracao-content">
+    <div class="modal-alteracao-icone modal-icone-erro">
+      <svg width="22" height="22" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+    <h2>Não é possível trocar</h2>
+    <p>Este Item já teve {{ item.qtd_movimentada }} unidade(s) movimentada(s) entregue. Não é possível trocar o item.</p>
+    <div class="modal-alteracao-acoes">
+      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}"
+      class="btn-primary" style="flex: 1; justify-content: center;">Voltar</a>
+    </div>
+  </div>
+</div>
+<style>
+.modal-alteracao{
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(10, 17, 40, 0.55);
+  align-items: center; justify-content: center;
+  z-index: 1000;
+}
+
+.modal-alteracao.aberto { display: flex; }
+.modal-alteracao-content {
+  background: var(--white); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  padding: 2rem; max-width: 420px; width: 90%; text-align: center;
+}
+
+.modal-alteracao-icone{
+  width: 48px; height: 48px; border-radius: 50%; margin: 0 auto 1rem;
+  background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-border);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.modal-alteracao-icone.modal-icone-erro {
+  background: var(--red-soft); color: var(--red-600); border-color: var(--red-border);
+}
+
+.modal-alteracao-content h2 {
+  margin: 0 0 0.6rem; font-size: 1.15rem; color: var(--navy-900);
+}
+
+.modal-alteracao-content p {
+  margin: 0 0 1.5rem; color: var(--text-dim); font-size: 0.92rem; line-height: 1.5;
+}
+
+.modal-alteracao-acoes{
+  display: flex; gap: 0.75rem;
+}
+
+.modal-alteracao-acoes .btn, .modal-alteracao-acoes
+.btn-primary {flex: 1; justify-content: center;}
+</style>
+
 {% endblock %}

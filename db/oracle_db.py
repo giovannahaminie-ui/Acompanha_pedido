@@ -516,7 +516,7 @@ def assumir_solicitacao(codemp, codfil, numsol, usuario_separador):
     agora = datetime.now()
     cur.execute(
         SQL_ASSUMIR_SOLICITACAO,
-        dataatual=agora, horaatual=agora.hour * 60 + agora.minute,
+        dataatual=agora.date(), horaatual=agora.hour * 60 + agora.minute,
         usucracha=usuario_separador, empsol=codemp, filsol=codfil, numsol=numsol,
     )
     conn.commit()
@@ -529,7 +529,7 @@ def assumir_solicitacao(codemp, codfil, numsol, usuario_separador):
 # ---------------------------------------------------------------------
 SQL_ITEM_SOLICITACAO_POR_SEQITE = """
 
-                SELECT usu_qtdabe, usu_qtdcan, usu_numped, usu_seqipd, usu_codpro
+                SELECT usu_qtdabe, usu_qtdcan, usu_qtdmov, usu_numped, usu_seqipd, usu_codpro
                 FROM sapiens.usu_t120sit
                     WHERE usu_codemp=:codemp 
                     AND usu_codfil=:codfil
@@ -580,9 +580,9 @@ def get_item_solicitacao(codemp, codfil, numsol, seqite):
     conn.close()
     if not row:
         return None
-    qtdabe, qtdcan, numped, seqipd, codpro = row
+    qtdabe, qtdcan, qtdmov, numped, seqipd, codpro = row
     return {
-        "qtd_aberta": _fmt_qtd(qtdabe), "qtd_cancelada": _fmt_qtd(qtdcan),
+        "qtd_aberta": _fmt_qtd(qtdabe), "qtd_cancelada": _fmt_qtd(qtdcan), "qtd_movimentada": _fmt_qtd(qtdmov),
         "numped": numped, "seqipd": seqipd, "codpro": codpro,
     }
 
@@ -959,7 +959,7 @@ def inserir_item_solicitacao(codemp, codfil, numsol, numped, seqipd, codpro, des
         codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
         numped=numped, seqipd=seqipd, qtd=qtd,
         codpro=codpro, descricao=(descricao or "")[:250],
-        data=agora, hora=agora.hour * 60 + agora.minute, usuario=int(usuario),
+        data=agora.date(), hora=agora.hour * 60 + agora.minute, usuario=int(usuario),
     )
 
     conn.commit()
@@ -1235,10 +1235,10 @@ def conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, qtdcon, usua
     conn = get_connection()
     cur = conn.cursor()
     agora = datetime.now()
-    horcon = agora.hour * 3600 + agora.minute * 60 + agora.second
+    horcon = agora.hour * 60 + agora.minute
     cur.execute(
         SQL_CONFERIR_ITEM_SOLICITACAO,
-        qtdcon=qtdcon, codemp=codemp, codfil=codfil, numsol=numsol, seqite=item["seqite"], usucon=usuario, datcon=agora, horcon=horcon, 
+        qtdcon=qtdcon, codemp=codemp, codfil=codfil, numsol=numsol, seqite=item["seqite"], usucon=usuario, datcon=agora.date(), horcon=horcon, 
     )
     cur.execute(
         SQL_RESERVAR_ESTOQUE,
@@ -1268,7 +1268,7 @@ def atualizar_situacao_atendida(codemp, codfil, numsol):
     cur = conn.cursor()
     agora = datetime.now()
     horcon = agora.hour * 60 + agora.minute
-    cur.execute(SQL_ATUALIZAR_SITSOL_ATENDIDO, codemp=codemp, codfil=codfil, numsol=numsol, datcon=agora, horcon=horcon)
+    cur.execute(SQL_ATUALIZAR_SITSOL_ATENDIDO, codemp=codemp, codfil=codfil, numsol=numsol, datcon=agora.date(), horcon=horcon)
     conn.commit()
     conn.close()
 

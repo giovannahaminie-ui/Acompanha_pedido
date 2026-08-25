@@ -208,8 +208,8 @@ def assumir_solicitacao(codemp, codfil, numsol):
 # ---------------------------------------------------------------------
 def _render_detalhe(
     codemp, codfil, numsol,
-    erro_inserir=None, painel_aberto=False, avisar_alteracao=None,
-    erro_conf=None, sucesso_conf=None, painel_conf_aberto=False,
+    erro_inserir=None, sucesso_inserir=None, painel_aberto=False, avisar_alteracao=None,
+    erro_conf=None, sucesso_conf=None, painel_conf_aberto=False, sucesso_troca=None,
 ):
     dados = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
     pendentes_inserir = local_db.listar_itens_pendentes(codemp, codfil, numsol)
@@ -225,6 +225,8 @@ def _render_detalhe(
         codemp=codemp, codfil=codfil, numsol=numsol,
         pendentes_inserir=pendentes_inserir,
         erro_inserir=erro_inserir,
+        sucesso_inserir=sucesso_inserir,
+        sucesso_troca=sucesso_troca,
         avisar_alteracao=avisar_alteracao,
         painel_inserir_aberto=painel_aberto or bool(pendentes_inserir),
         itens_conferencia=itens_conferencia,
@@ -397,7 +399,11 @@ def inserir_peca_confirmar(codemp, codfil, numsol):
     except pedido_ws.PedidoWebserviceError as e:
         return _render_detalhe(codemp, codfil, numsol, erro_inserir=f"Falha ao incluir peça: {e}", painel_aberto=True)
 
-    return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+    itens_txt = "; ".join(f"{item['codpro']} -{item['descricao']}" for item in pendentes)
+    sucesso_inserir = (
+        f"Item {itens_txt} inserido na solicitação."
+    )
+    return _render_detalhe(codemp, codfil, numsol, sucesso_inserir=sucesso_inserir)
 
 # ---------------------------------------------------------------------
  #Conferência com reserva - bipar/adicionar fica local (rápido, sem ida
@@ -483,6 +489,13 @@ def trocar_item(codemp, codfil, numsol, seqite):
     item_pedido = None
     if item["seqipd"]:
         item_pedido = oracle_db.get_item_pedido(codemp, codfil, item["numped"], item["seqipd"])
+
+    if item["qtd_movimentada"]:
+        return render_template(
+            "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite, item=item, item_pedido=item_pedido,
+            produto=None, qtd=0, codpro_novo="", erro=None, diferenca_preco=None, alerta_preco=False, autorizado_por="", mostrar_confirmacao=False,
+            item_existente_solicitacao=None, bloqueado=True, 
+        )
 
     erro = None
     produto = None
@@ -584,7 +597,8 @@ def trocar_item(codemp, codfil, numsol, seqite):
                         oracle_db.salvar_observacao_item(
                             codemp, codfil, numsol, seqite_novo, msg_troca,
                         )
-                    return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+                    sucesso_troca = f"Troca concluída: {item['codpro']} trocado por {produto['codpro']} - {produto['descricao']}."
+                    return _render_detalhe(codemp, codfil, numsol, sucesso_troca=sucesso_troca)
                 except pedido_ws.PedidoWebserviceError as e:
                     erro = (
                         f"O item substituído JÁ FOI CANCELADO, mas a inclusão do item novo falhou: {e} "
