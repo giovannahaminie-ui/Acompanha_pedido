@@ -494,7 +494,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
         return render_template(
             "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite, item=item, item_pedido=item_pedido,
             produto=None, qtd=0, codpro_novo="", erro=None, diferenca_preco=None, alerta_preco=False, autorizado_por="", mostrar_confirmacao=False,
-            item_existente_solicitacao=None, bloqueado=True, 
+            bloqueado=True,
         )
 
     erro = None
@@ -504,7 +504,6 @@ def trocar_item(codemp, codfil, numsol, seqite):
     diferenca_preco = None
     alerta_preco = False
     mostrar_confirmacao = False
-    item_existente_solicitacao = None
     autorizado_por = request.form.get("autorizado_por", "").strip()
 
     if request.method == "POST":
@@ -531,9 +530,6 @@ def trocar_item(codemp, codfil, numsol, seqite):
                     erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
                 elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], produto["codpro"]):
                     erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
-
-        if not erro and produto:
-            item_existente_solicitacao = oracle_db.get_item_solicitacao_por_codpro(codemp, codfil, numsol, produto["codpro"])
 
         # Produto passou por todas as checagens - mostra a etapa de
         # confirmação mesmo que a autorização de preço ainda falte (ver
@@ -573,23 +569,14 @@ def trocar_item(codemp, codfil, numsol, seqite):
                         if preco_substituido is not None and preco_substituido > produto["preco"]
                         else None
                     ) 
-                    if item_existente_solicitacao:
-                        pedido_ws.adicionar_qtd_item_pedido(
-                            codemp, codfil, item["numped"], item_existente_solicitacao["seqipd"], qtd, session["usuario"],
-                        )
-                        oracle_db.adicionar_qtd_item_solicitacao(
-                            codemp, codfil, numsol, item_existente_solicitacao["seqite"], qtd,
-                        )
-                        seqite_novo = item_existente_solicitacao["seqite"]
-                    else:
-                        seqipd_novo = pedido_ws.incluir_item_pedido(
-                            codemp, codfil, item["numped"], produto["codpro"], qtd,
-                            preco_incluir, produto["codtab"], session["usuario"],
-                        )
-                        seqite_novo = oracle_db.inserir_item_solicitacao(
-                            codemp, codfil, numsol, item["numped"], seqipd_novo, produto["codpro"],
-                            produto["descricao"], qtd, session["usuario"], veio_de_troca=True,
-                        )
+                    seqipd_novo = pedido_ws.incluir_item_pedido(
+                        codemp, codfil, item["numped"], produto["codpro"], qtd,
+                        preco_incluir, produto["codtab"], session["usuario"],
+                    )
+                    seqite_novo = oracle_db.inserir_item_solicitacao(
+                        codemp, codfil, numsol, item["numped"], seqipd_novo, produto["codpro"],
+                        produto["descricao"], qtd, session["usuario"], veio_de_troca=True,
+                    )
                     if alerta_preco:
                         # Mensagem enxuta - usu_obsite tem limite de 99
                         # caracteres (VARCHAR2(99)).
@@ -609,7 +596,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
         "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
         item=item, item_pedido=item_pedido, produto=produto, qtd=qtd, codpro_novo=codpro_novo, erro=erro,
         diferenca_preco=diferenca_preco, alerta_preco=alerta_preco, autorizado_por=autorizado_por,
-        mostrar_confirmacao=mostrar_confirmacao, item_existente_solicitacao=item_existente_solicitacao,
+        mostrar_confirmacao=mostrar_confirmacao,
     )
 
 def _dados_e_sugestao_loja(codemp, codfil, item):

@@ -68,12 +68,6 @@
             </div>
           {% endif %}
 
-          {% if item_existente_solicitacao %}
-            <div class="alert">
-              Este produto já está nessa solicitação (qtd. atual: {{ item_existente_solicitacao.qtd_solicitada }}). Ao confirmar, a quantidade de {{ qtd }} será somada ao item existente, em vez de criar uma linha nova no pedido.
-            </div>
-          {% endif %}
-
           <form method="POST">
             <input type="hidden" name="codpro_novo" value="{{ codpro_novo }}">
             <input type="hidden" name="qtd" value="{{ qtd }}">

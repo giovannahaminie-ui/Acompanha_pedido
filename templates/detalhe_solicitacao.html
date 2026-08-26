@@ -213,31 +213,29 @@
     // - a setinha dentro do próprio painel só recolhe o conteúdo (campos/
     //   lista/tabela/botões) - o título e a setinha continuam visíveis, só
     //   a setinha vira pra indicar que tá recolhido.
-    function configurarPainelRecolhivel(painelId, btnToggleId, conteudoId, btnRecolherId, semItens) {
-      const painel = document.getElementById(painelId);
-      const conteudo = document.getElementById(conteudoId);
-      const btnToggle = document.getElementById(btnToggleId);
-      const btnRecolher = document.getElementById(btnRecolherId);
-      if (painel && btnToggle) {
-        btnToggle.addEventListener('click', function () 
-        {
-          if (semItens && !painel.classList.contains('aberto')) {
-            document.getElementById('modal-sem-conferencia').classList.add('aberto');
-            return;
-          }
-          painel.classList.toggle('aberto');
-        });
+    function configurarPainelRecolhivel(painelId, btnToggleId, conteudoId, btnRecolherId, semItens, focusId) {
+  const painel = document.getElementById(painelId);
+  const conteudo = document.getElementById(conteudoId);
+  const btnToggle = document.getElementById(btnToggleId);
+  const btnRecolher = document.getElementById(btnRecolherId);
+  if (painel && btnToggle) {
+    btnToggle.addEventListener('click', function () 
+    {
+      if (semItens && !painel.classList.contains('aberto')) {
+        document.getElementById('modal-sem-conferencia').classList.add('aberto');
+        return;
       }
-      if (conteudo && btnRecolher) {
-        btnRecolher.addEventListener('click', function () {
-          conteudo.classList.toggle('recolhido');
-          btnRecolher.classList.toggle('recolhido');
-        });
+      painel.classList.toggle('aberto');
+      if (painel.classList.contains('aberto') && focusId) {
+        const campo = document.getElementById(focusId);
+        if (campo) campo.focus();
       }
-    }
+    });
+  }
+}
 
-    configurarPainelRecolhivel('painel-inserir-peca', 'btn-toggle-inserir-peca', 'painel-inserir-conteudo', 'btn-recolher-inserir', false);
-    configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'painel-conferencia-conteudo', 'btn-recolher-conferencia', document.getElementById('painel-conferencia').dataset.semItens === 'true');
+configurarPainelRecolhivel('painel-inserir-peca', 'btn-toggle-inserir-peca', 'painel-inserir-conteudo', 'btn-recolher-inserir', false, 'qtd_inserir');
+configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'painel-conferencia-conteudo', 'btn-recolher-conferencia', document.getElementById('painel-conferencia').dataset.semItens === 'true', 'qtdcon');
   });
 
   function fecharModalAlteracao() {

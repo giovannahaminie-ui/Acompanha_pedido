@@ -78,9 +78,9 @@
 
   {% if nome_usuario_logado %}
   <script>
-    //Logout automático por inatividade (1 min sem interação com a tela).
+    //Logout automático por inatividade (5 min sem interação com a tela).
     (function (){
-      const LIMITE_INATIVIDADE_MS = 60000;
+      const LIMITE_INATIVIDADE_MS = 300000;
       let timer;
       function reiniciarTimer() {
         clearTimeout(timer);
