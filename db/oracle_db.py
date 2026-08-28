@@ -236,7 +236,7 @@ def _classificar_por_etapa(rows):
             solicitados.append(item)
         elif situacao == 5:
             em_separacao.append(item)
-        else:
+        elif situacao == 4:
             atendidos.append(item)
     return {"solicitados": solicitados, "em_separacao": em_separacao, "atendidos": atendidos}
 
@@ -1262,10 +1262,28 @@ SQL_ATUALIZAR_SITSOL_ATENDIDO = """
                     AND usu_numsol = :numsol    
 """
 
+SQL_ITENS_PENDENTES_CONFERENCIA = """
+                    SELECT COUNT(*)
+                        FROM sapiens.USU_T120SIT
+                    WHERE usu_codemp = :codemp
+                    AND usu_codfil = :codfil
+                    AND usu_numsol = :numsol
+                    AND usu_sitite IN (1,2)
+                    AND usu_qtdabe > 0
+
+
+"""
+
 def atualizar_situacao_atendida(codemp, codfil, numsol):
-    "Marca a solicitação na tabela USU_T120SDG como atendida - chamado após a conferência"
+    "Marca a solicitação como (4) apenas após a conferência de todos os itens da solicitação"
     conn = get_connection()
     cur = conn.cursor()
+
+    cur.execute(SQL_ITENS_PENDENTES_CONFERENCIA, codemp=codemp, codfil=codfil, numsol=numsol)
+    itens_pendentes = cur.fetchone()[0]
+    if itens_pendentes:
+        conn.close()
+        return
     agora = datetime.now()
     horcon = agora.hour * 60 + agora.minute
     cur.execute(SQL_ATUALIZAR_SITSOL_ATENDIDO, codemp=codemp, codfil=codfil, numsol=numsol, datcon=agora.date(), horcon=horcon)
