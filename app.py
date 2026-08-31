@@ -58,10 +58,22 @@ def injetar_perfil():
 # ---------------------------------------------------------------------
 # Autenticação / Tela de Login por CodUsuario (usuário do Sapiens)
 # ---------------------------------------------------------------------
+def resolver_identificador(valor: str) -> str:
+    """Recebe o que veio do campo de login / leitor de crachá e devolve o
+    código de usuário do Sapiens a ser validado.
+
+    O código de barras do crachá é aleatório (não é o codusu), então primeiro
+    tentamos a tabela de-para local (cadastrada em /admin/crachas). Se o valor
+    não estiver lá, devolvemos ele mesmo — assim o login digitado com o código
+    do Sapiens continua funcionando como sempre."""
+    valor = (valor or "").strip()
+    return local_db.get_codusu_por_cracha(valor) or valor
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        usuario = request.form["usuario"].strip()
+        usuario = resolver_identificador(request.form["usuario"])
         dados = oracle_db.verificar_login(usuario)
         if dados:
             session["usuario"] = dados["usuario"]
@@ -189,7 +201,7 @@ def assumir_solicitacao(codemp, codfil, numsol):
     cabecalho = oracle_db.get_solicitacao_cabecalho(codemp, codfil, numsol)
 
     if request.method == "POST":
-        usuario = request.form["usuario"].strip()
+        usuario = resolver_identificador(request.form["usuario"])
         dados = oracle_db.verificar_login(usuario)
         if dados:
             oracle_db.assumir_solicitacao(codemp, codfil, numsol, dados["usuario"])
@@ -927,6 +939,60 @@ def salvar_perfil():
         request.form["usuario"], request.form["perfil"], request.form.get("nome")
     )
     return redirect(url_for("admin_perfis"))
+
+# ---------------------------------------------------------------------
+# Cadastro de crachás (de-para código de barras do crachá -> codusu)
+# ---------------------------------------------------------------------
+@app.route("/admin/crachas")
+@login_obrigatorio
+def admin_crachas():
+    if perfil_atual() != "G":
+        return redirect(url_for("painel"))
+    return render_template(
+        "admin_crachas.html",
+        crachas=local_db.listar_crachas(),
+    )
+
+@app.route("/admin/crachas/salvar", methods=["POST"])
+@login_obrigatorio
+def salvar_cracha():
+    if perfil_atual() != "G":
+        return redirect(url_for("painel"))
+    codigo_cracha = (request.form.get("codigo_cracha") or "").strip()
+    codusu = (request.form.get("codusu") or "").strip()
+    if not codigo_cracha or not codusu:
+        return render_template(
+            "admin_crachas.html", crachas=local_db.listar_crachas(),
+            erro="Passe o crachá e informe o código do Sapiens.",
+        )
+    dados = oracle_db.verificar_login(codusu)
+    if not dados:
+        return render_template(
+            "admin_crachas.html", crachas=local_db.listar_crachas(),
+            erro=f"Código de usuário '{codusu}' não existe (ou está inativo) no Sapiens.",
+        )
+    local_db.salvar_cracha(
+        codigo_cracha, dados["usuario"], dados["nome"], criado_por=session.get("usuario")
+    )
+    # Nível de acesso (opcional). Só grava se algo foi escolhido - assim
+    # deixar em "Sem alteração" não apaga um perfil que a pessoa já tem.
+    perfil = (request.form.get("perfil") or "").strip()
+    if perfil in ("G", "B", "U", "__limpar__"):
+        local_db.salvar_perfil(
+            dados["usuario"], "" if perfil == "__limpar__" else perfil, dados["nome"]
+        )
+    return render_template(
+        "admin_crachas.html", crachas=local_db.listar_crachas(),
+        sucesso=f"Crachá vinculado a {dados['nome']} (código {dados['usuario']}).",
+    )
+
+@app.route("/admin/crachas/remover", methods=["POST"])
+@login_obrigatorio
+def remover_cracha():
+    if perfil_atual() != "G":
+        return redirect(url_for("painel"))
+    local_db.remover_cracha((request.form.get("codigo_cracha") or "").strip())
+    return redirect(url_for("admin_crachas"))
 
 @app.route("/")
 def index():

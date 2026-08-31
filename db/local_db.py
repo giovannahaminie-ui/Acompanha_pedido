@@ -82,6 +82,22 @@ def init_db():
     if "seqipd_existente" not in colunas_pendentes:
         conn.execute("ALTER TABLE itens_inserir_pendentes ADD COLUMN seqipd_existente INTEGER")
 
+    # De-para crachá -> código de usuário do Sapiens. O código de barras do
+    # crachá é aleatório (não tem relação com o codusu), então a única forma
+    # de identificar quem passou o crachá é essa tabela, alimentada uma vez
+    # por pessoa na tela /admin/crachas.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cracha_usuario (
+            codigo_cracha TEXT PRIMARY KEY,   -- o que o leitor lê, ex: QmiT#wC6iXdG
+            codusu        TEXT NOT NULL,      -- código de usuário do Sapiens
+            nome          TEXT,               -- nome vindo do Sapiens (conferência)
+            criado_em     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            criado_por    TEXT                -- codusu de quem cadastrou
+        )
+        """
+    )
+
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS
@@ -296,7 +312,65 @@ def adicionar_item_conferencia_pendentes(codemp, codfil, numsol, codbar, qtd, us
 
 def remover_item_conferencia_pendente(id_pendente):
     conn = get_conn()
-    conn.execute("DELETE FROM itens_conferencia_pendentes WHERE id=?", 
+    conn.execute("DELETE FROM itens_conferencia_pendentes WHERE id=?",
     (id_pendente,))
+    conn.commit()
+    conn.close()
+
+
+# ===== DE-PARA CRACHÁ -> CODUSU =====
+
+def get_codusu_por_cracha(codigo_cracha: str):
+    """Retorna o codusu (str) vinculado a esse código de crachá, ou None."""
+    if not codigo_cracha:
+        return None
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT codusu FROM cracha_usuario WHERE codigo_cracha = ?",
+        (codigo_cracha,),
+    ).fetchone()
+    conn.close()
+    return row["codusu"] if row else None
+
+
+def salvar_cracha(codigo_cracha: str, codusu: str, nome: str = None, criado_por: str = None):
+    """Cadastra (ou re-vincula) um crachá a um codusu do Sapiens."""
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO cracha_usuario (codigo_cracha, codusu, nome, criado_por)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(codigo_cracha) DO UPDATE SET
+            codusu     = excluded.codusu,
+            nome       = excluded.nome,
+            criado_por = excluded.criado_por,
+            criado_em  = CURRENT_TIMESTAMP
+        """,
+        (codigo_cracha, codusu, nome, criado_por),
+    )
+    conn.commit()
+    conn.close()
+
+
+def listar_crachas():
+    """Lista os crachás cadastrados (mais recentes primeiro), já com o
+    perfil (G/B/U) atual da pessoa, se houver."""
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT c.codigo_cracha, c.codusu, c.nome, c.criado_em, c.criado_por,
+               p.perfil AS perfil
+        FROM cracha_usuario c
+        LEFT JOIN usuarios_perfil p ON p.usuario = c.codusu
+        ORDER BY c.criado_em DESC
+        """
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def remover_cracha(codigo_cracha: str):
+    conn = get_conn()
+    conn.execute("DELETE FROM cracha_usuario WHERE codigo_cracha = ?", (codigo_cracha,))
     conn.commit()
     conn.close()

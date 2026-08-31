@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Crachás{% endblock %}
+{% block content %}
+
+<div class="header-bar">
+  <div class="brand">
+    <div class="brand-mark">RT</div>
+    <div>
+      <h1>Crachás</h1>
+      <p class="subtitle">Acesso restrito à gerência · {{ crachas|length }} crachá(s) vinculado(s)</p>
+    </div>
+  </div>
+  <a href="{{ url_for('painel') }}" class="btn-trocar">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+    Voltar ao painel
+  </a>
+</div>
+
+{% if erro %}
+  <div class="alert">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+    {{ erro }}
+  </div>
+{% endif %}
+{% if sucesso %}
+  <div class="alert" style="border-color:var(--perfil-u,#2e7d32); color:var(--perfil-u,#2e7d32);">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    {{ sucesso }}
+  </div>
+{% endif %}
+
+<div class="table-card" style="padding:1.2rem;">
+  <form method="POST" action="{{ url_for('salvar_cracha') }}">
+    <div class="field">
+      <label for="codigo_cracha">Passe o crachá no leitor</label>
+      <input type="text" id="codigo_cracha" name="codigo_cracha" placeholder="Encoste o cursor aqui e passe o crachá" required autofocus autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="codusu">Código de usuário do Sapiens dessa pessoa</label>
+      <input type="text" id="codusu" name="codusu" placeholder="Ex: 131" required autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="perfil">Nível de acesso (opcional)</label>
+      <select id="perfil" name="perfil">
+        <option value="">Não alterar</option>
+        <option value="G">Gerência</option>
+        <option value="B">Boqueta</option>
+        <option value="U">Usinagem</option>
+        <option value="__limpar__">Remover perfil</option>
+      </select>
+    </div>
+    <button type="submit" class="btn-primary" style="justify-content:center;">
+      Vincular crachá
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </button>
+    <p class="note" style="margin-top:0.6rem;">O nome é buscado no Sapiens pelo código na hora de salvar, pra você conferir.</p>
+  </form>
+</div>
+
+<div class="table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>Pessoa</th>
+        <th>Nível</th>
+        <th>Código do crachá</th>
+        <th>Cadastrado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in crachas %}
+      <tr>
+        <td>
+          <div class="user-cell">
+            <span class="avatar">{{ (c.nome or c.codusu)[:2]|upper }}</span>
+            <div>
+              <div class="user-name">{{ c.nome or '(sem nome)' }}</div>
+              <div class="user-code" style="margin-top:0.15rem;">código {{ c.codusu }}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <span class="perfil-tag perfil-tag-{{ c.perfil if c.perfil else 'none' }}">
+            {{ {'G': 'Gerência', 'B': 'Boqueta', 'U': 'Usinagem'}.get(c.perfil, 'Sem perfil') }}
+          </span>
+        </td>
+        <td><code>{{ c.codigo_cracha }}</code></td>
+        <td>{{ c.criado_em }}{% if c.criado_por %} · por {{ c.criado_por }}{% endif %}</td>
+        <td>
+          <form method="POST" action="{{ url_for('remover_cracha') }}" onsubmit="return confirm('Remover o vínculo desse crachá?');">
+            <input type="hidden" name="codigo_cracha" value="{{ c.codigo_cracha }}">
+            <button type="submit" class="btn-trocar" style="color:var(--perfil-none,#b23b3b);">Remover</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="note" style="text-align:center; padding:1.4rem;">Nenhum crachá cadastrado ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="note">Depois de vincular, a pessoa entra no sistema só passando o crachá no leitor, sem digitar nada.</p>
+
+{% endblock %}
