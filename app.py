@@ -1043,24 +1043,33 @@ def entrega_item(codemp, codfil, numsol):
     if request.method == "POST":
         seqites = [int(s) for s in request.form.getlist("seqites")]
         itens_selecionados = [i for i in itens_entrega if i["seqite"] in seqites]
-        
-        if itens_selecionados:
-            try:
-                # Chamar webservice com todos os itens de uma vez
-                filexe = oracle_db.get_filial_pedido(codemp, codfil, detalhe["solicitacao"]["numped"])
-                coddep = oracle_db.get_coddep_esperado(codemp, filexe)
 
+        if not itens_selecionados:
+            return render_template(
+                "entrega_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
+                itens=itens_entrega, erro="Nenhum item selecionado", detalhe=detalhe
+            )
+
+        # Dados comuns a todos os itens (mesma solicitação / mesmo pedido)
+        filexe = oracle_db.get_filial_pedido(codemp, codfil, detalhe["solicitacao"]["numped"])
+        coddep = oracle_db.get_coddep_esperado(codemp, filexe)
+
+        entregues = []
+        falhas = []
+
+        # Processa UM item por vez (fila). O webservice de estoque só aceita um por vez.
+        for item in itens_selecionados:
+            qtd_entrega = float(item["qtd_atendida"]) - float(item["qtd_movimentada"])
+            try:
                 # Estorna a reserva ANTES de transferir - senão o webservice
                 # calcula o saldo disponível já descontando a reserva feita
                 # na conferência e recusa por "sem estoque".
-                for item in itens_selecionados:
-                    qtd_entrega = float(item["qtd_atendida"]) - float(item["qtd_movimentada"])
-                    oracle_db.estornar_reserva_estoque(
-                        codemp=codemp, coddep=coddep, codpro=item["codpro1"], qtd=qtd_entrega
-                    )
+                oracle_db.estornar_reserva_estoque(
+                    codemp=codemp, coddep=coddep, codpro=item["codpro1"], qtd=qtd_entrega
+                )
 
                 sucesso, datmovws, mensagem_retorno = pedido_ws.transferencia_produtos(
-                    itens=itens_selecionados,
+                    itens=[item],
                     codemp=codemp,
                     codfil=codfil,
                     numped=detalhe["solicitacao"]["numped"],
@@ -1068,40 +1077,48 @@ def entrega_item(codemp, codfil, numsol):
                     filexe=filexe,
                 )
 
-                if sucesso:
-                    # Atualizar item a item no banco de dados
-                    for item in itens_selecionados:
-                        qtd_entrega = float(item["qtd_atendida"]) - float(item["qtd_movimentada"])
+                if not sucesso:
+                    falhas.append(f"{item['codpro2']}: {mensagem_retorno or 'falha na transferência'}")
+                    continue
 
-                        oracle_db.atualizar_mvp(
-                            codemp=codemp, codpro=item["codpro1"],
-                            numped=detalhe["solicitacao"]["numped"], seqipd=item["seqipd"],
-                            usuario=session["usuario"], datmovws=datmovws
-                        )
-                        oracle_db.atualizar_ipd(
-                            codemp=codemp, filped=codfil, numped=detalhe["solicitacao"]["numped"],
-                            seqipd=item["seqipd"], qtd=qtd_entrega
-                        )
-                        oracle_db.atualizar_entrega_e120sit(
-                            codemp=codemp, codfil=codfil, numsol=numsol,
-                            seqite=item["seqite"], qtd=qtd_entrega,
-                            usuario=session["usuario"], datmovws=datmovws
-                        )
+                oracle_db.atualizar_mvp(
+                    codemp=codemp, codpro=item["codpro1"],
+                    numped=detalhe["solicitacao"]["numped"], seqipd=item["seqipd"],
+                    usuario=session["usuario"], datmovws=datmovws
+                )
+                oracle_db.atualizar_ipd(
+                    codemp=codemp, filped=codfil, numped=detalhe["solicitacao"]["numped"],
+                    seqipd=item["seqipd"], qtd=qtd_entrega
+                )
+                oracle_db.atualizar_entrega_e120sit(
+                    codemp=codemp, codfil=codfil, numsol=numsol,
+                    seqite=item["seqite"], qtd=qtd_entrega,
+                    usuario=session["usuario"], datmovws=datmovws
+                )
 
-                    local_db.registrar_acao(
-                        tipo_acao="entrega_realizada",
-                        usuario=session["usuario"],
-                        codemp=codemp, codfil=codfil, numsol=numsol,
-                        detalhes=f"Entrega de {len(itens_selecionados)} item(ns)"
-                    )
-                    return redirect(url_for("painel"))
-                else:
-                    erro = mensagem_retorno or "Falha na transferência de estoque"
+                local_db.registrar_acao(
+                    tipo_acao="entrega_realizada",
+                    usuario=session["usuario"],
+                    codemp=codemp, codfil=codfil, numsol=numsol,
+                    detalhes=f"Entrega do item {item['codpro2']} (qtd {qtd_entrega})"
+                )
+                entregues.append(item["codpro2"])
             except Exception as e:
-                erro = str(e)
-        else:
-            erro = "Nenhum item selecionado"
-        
+                falhas.append(f"{item['codpro2']}: {e}")
+
+        # Deu tudo certo - volta pro painel
+        if not falhas:
+            return redirect(url_for("painel"))
+
+        # Alguns itens falharam: recarrega a tela mostrando o saldo real
+        # (os que foram entregues já saem da lista) e o resumo do que faltou.
+        detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+        itens_entrega = [
+            i for i in detalhe["itens"]
+            if float(i["qtd_atendida"]) > float(i["qtd_movimentada"])
+        ]
+        resumo = f"Entregues: {', '.join(entregues)}. " if entregues else ""
+        erro = resumo + "Falha em: " + " | ".join(falhas)
         return render_template(
             "entrega_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
             itens=itens_entrega, erro=erro, detalhe=detalhe
