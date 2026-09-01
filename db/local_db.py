@@ -138,9 +138,20 @@ def listar_usuarios_com_perfil(usuarios_sapiens):
         r["usuario"]: r["perfil"]
         for r in conn.execute("SELECT usuario, perfil FROM usuarios_perfil").fetchall()
     }
+    # Código(s) de barras de crachá por usuário (pode haver mais de um por pessoa;
+    # mais recente primeiro). Chave como str pra bater com o codusu do Sapiens.
+    crachas = {}
+    for r in conn.execute(
+        "SELECT codusu, codigo_cracha FROM cracha_usuario ORDER BY criado_em DESC"
+    ).fetchall():
+        crachas.setdefault(str(r["codusu"]), []).append(r["codigo_cracha"])
     conn.close()
     return [
-        {"usuario": u["usuario"], "nome": u["nome"], "perfil": perfis.get(u["usuario"])}
+        {
+            "usuario": u["usuario"], "nome": u["nome"],
+            "perfil": perfis.get(u["usuario"]),
+            "crachas": crachas.get(str(u["usuario"]), []),
+        }
         for u in usuarios_sapiens
     ]
 

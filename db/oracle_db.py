@@ -1430,6 +1430,16 @@ def estornar_reserva_estoque(codemp, coddep, codpro, qtd):
     conn.commit()
     conn.close()
 
+def reservar_estoque(codemp, coddep, codpro, qtd):
+    """Repõe em E210EST a reserva que o estorno da entrega tirou - usado quando
+    a transferência falha, pra não deixar o saldo negativo numa nova tentativa.
+    Inverso exato de estornar_reserva_estoque (reaproveita SQL_RESERVAR_ESTOQUE)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_RESERVAR_ESTOQUE, {"qtdcon": qtd, "codemp": codemp, "coddep": coddep, "codpro": codpro})
+    conn.commit()
+    conn.close()
+
 SQL_ATUALIZAR_IPD = """
                 UPDATE sapiens.E120IPD SET usu_qtdmov = usu_qtdmov + :qtd, qtdres = qtdres - :qtd
                     WHERE codemp=:codemp 

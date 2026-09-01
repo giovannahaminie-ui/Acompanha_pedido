@@ -23,10 +23,19 @@
       </button>
       <div class="admin-dropdown-menu">
         <a href="{{ url_for('admin_perfis') }}">Usuários e perfis</a>
-        <a href="{{ url_for('admin_crachas') }}">Crachás</a>
+        <a href="{{ url_for('admin_crachas') }}">Cadastrar/editar crachás</a>
         <a href="{{ url_for('historico_geral') }}">Histórico geral</a>
+        <a href="{{ url_for('logout') }}" class="admin-shortcut" style="color:var(--perfil-none,#b23b3b);" title="Sair da conta">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+      Sair
+    </a>
       </div>
     </div>
+    {% else %}
+    <a href="{{ url_for('logout') }}" class="admin-shortcut" style="color:var(--perfil-none,#b23b3b);" title="Sair da conta">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+      Sair
+    </a>
     {% endif %}
   </div>
   {% endif %}

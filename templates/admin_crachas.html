@@ -6,7 +6,7 @@
   <div class="brand">
     <div class="brand-mark">RT</div>
     <div>
-      <h1>Crachás</h1>
+      <h1>Cadastro e edição de Crachás:</h1>
       <p class="subtitle">Acesso restrito à gerência · {{ crachas|length }} crachá(s) vinculado(s)</p>
     </div>
   </div>
@@ -29,35 +29,44 @@
   </div>
 {% endif %}
 
+<!-- ESCOLHA DO MODO -->
+<div class="filtro-perfil-row" style="margin-bottom:1.25rem;">
+  <span class="filtro-chip active" data-modo="novo">Cadastrar novo</span>
+  <span class="filtro-chip" data-modo="editar">Editar um já existente</span>
+</div>
+
 <div class="table-card" style="padding:1.2rem;">
-  <form method="POST" action="{{ url_for('salvar_cracha') }}">
+  <p class="section-title" id="form-titulo">Novo crachá</p>
+  <form method="POST" action="{{ url_for('salvar_cracha') }}" id="form-cracha">
     <div class="field">
       <label for="codigo_cracha">Passe o crachá no leitor</label>
       <input type="text" id="codigo_cracha" name="codigo_cracha" placeholder="Encoste o cursor aqui e passe o crachá" required autofocus autocomplete="off">
     </div>
     <div class="field">
       <label for="codusu">Código de usuário do Sapiens dessa pessoa</label>
-      <input type="text" id="codusu" name="codusu" placeholder="Ex: 131" required autocomplete="off">
+      <input type="text" id="codusu" name="codusu" placeholder="Ex: 131" required autocomplete="off" inputmode="numeric">
     </div>
     <div class="field">
-      <label for="perfil">Nível de acesso (opcional)</label>
+      <label for="perfil">Nível de acesso</label>
       <select id="perfil" name="perfil">
         <option value="">Não alterar</option>
         <option value="G">Gerência</option>
         <option value="B">Boqueta</option>
         <option value="U">Usinagem</option>
-        <option value="__limpar__">Remover perfil</option>
+        <option value="__limpar__">Remover nível</option>
       </select>
+      <p class="note" style="margin-top:0.4rem;">"Não alterar" só faz sentido na edição, pra não mexer no nível que a pessoa já tem.</p>
     </div>
-    <button type="submit" class="btn-primary" style="justify-content:center;">
+    <button type="submit" class="btn-primary" id="btn-salvar-cracha" style="justify-content:center;">
       Vincular crachá
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
     </button>
+    <button type="button" class="btn-trocar" id="btn-cancelar-edicao" style="margin-top:0.6rem; justify-content:center;" hidden>Limpar / escolher outro</button>
     <p class="note" style="margin-top:0.6rem;">O nome é buscado no Sapiens pelo código na hora de salvar, pra você conferir.</p>
   </form>
 </div>
 
-<div class="table-card">
+<div class="table-card" id="card-lista" hidden>
   <table>
     <thead>
       <tr>
@@ -88,10 +97,19 @@
         <td><code>{{ c.codigo_cracha }}</code></td>
         <td>{{ c.criado_em }}{% if c.criado_por %} · por {{ c.criado_por }}{% endif %}</td>
         <td>
-          <form method="POST" action="{{ url_for('remover_cracha') }}" onsubmit="return confirm('Remover o vínculo desse crachá?');">
-            <input type="hidden" name="codigo_cracha" value="{{ c.codigo_cracha }}">
-            <button type="submit" class="btn-trocar" style="color:var(--perfil-none,#b23b3b);">Remover</button>
-          </form>
+          <div style="display:flex; gap:0.4rem; align-items:center;">
+            <button type="button" class="btn-trocar" title="Editar informações"
+                    onclick="editarCracha(this)"
+                    data-codigo="{{ c.codigo_cracha }}"
+                    data-codusu="{{ c.codusu }}"
+                    data-perfil="{{ c.perfil or '' }}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+            </button>
+            <form method="POST" action="{{ url_for('remover_cracha') }}" onsubmit="return confirm('Remover o vínculo desse crachá?');">
+              <input type="hidden" name="codigo_cracha" value="{{ c.codigo_cracha }}">
+              <button type="submit" class="btn-trocar" style="color:var(--perfil-none,#b23b3b);">Remover</button>
+            </form>
+          </div>
         </td>
       </tr>
       {% else %}
@@ -101,6 +119,68 @@
   </table>
 </div>
 
-<p class="note">Depois de vincular, a pessoa entra no sistema só passando o crachá no leitor, sem digitar nada.</p>
+<p class="note">Depois de vincular, a pessoa entra no sistema só passando o crachá no leitor, sem digitar nada. A conferência de quem tem crachá fica em <a href="{{ url_for('admin_perfis') }}">Usuários e perfis</a>.</p>
+
+<script>
+(function () {
+  const chips        = document.querySelectorAll('.filtro-chip[data-modo]');
+  const cardLista    = document.getElementById('card-lista');
+  const formTitulo   = document.getElementById('form-titulo');
+  const campoCodigo  = document.getElementById('codigo_cracha');
+  const campoCodusu  = document.getElementById('codusu');
+  const campoPerfil  = document.getElementById('perfil');
+  const btnSalvar    = document.getElementById('btn-salvar-cracha');
+  const btnCancelar  = document.getElementById('btn-cancelar-edicao');
+  const rotuloNovo   = btnSalvar.innerHTML;   // guarda o texto+ícone original
+  let modo = 'novo';
+
+  function limpar() {
+    campoCodigo.value = '';
+    campoCodusu.value = '';
+    campoPerfil.value = '';
+  }
+
+  function aplicarModo(novoModo) {
+    modo = novoModo;
+    chips.forEach(c => c.classList.toggle('active', c.dataset.modo === modo));
+    limpar();
+    if (modo === 'editar') {
+      cardLista.hidden = false;
+      formTitulo.textContent = 'Editar crachá — clique no lápis de um crachá da lista abaixo';
+      campoCodigo.readOnly = true;          // no modo editar o código vem da lista
+      btnSalvar.textContent = 'Salvar alteração';
+      btnCancelar.hidden = false;
+    } else {
+      cardLista.hidden = true;
+      formTitulo.textContent = 'Novo crachá';
+      campoCodigo.readOnly = false;
+      btnSalvar.innerHTML = rotuloNovo;
+      btnCancelar.hidden = true;
+      campoCodigo.focus();
+    }
+  }
+
+  chips.forEach(chip => chip.addEventListener('click', () => aplicarModo(chip.dataset.modo)));
+
+  // chamado pelo onclick inline dos lápis na lista
+  window.editarCracha = function (btn) {
+    if (modo !== 'editar') aplicarModo('editar');
+    campoCodigo.value = btn.dataset.codigo;
+    campoCodusu.value = btn.dataset.codusu;
+    campoPerfil.value = btn.dataset.perfil || '';
+    campoCodigo.readOnly = true;
+    btnSalvar.textContent = 'Salvar alteração';
+    btnCancelar.hidden = false;
+    document.getElementById('form-cracha').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    campoCodusu.focus();
+  };
+
+  btnCancelar.addEventListener('click', function () {
+    limpar();
+    campoCodigo.readOnly = (modo === 'editar');
+    campoCodusu.focus();
+  });
+})();
+</script>
 
 {% endblock %}

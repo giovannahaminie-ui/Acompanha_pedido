@@ -948,14 +948,14 @@ def salvar_perfil():
 def admin_crachas():
     if perfil_atual() != "G":
         return redirect(url_for("painel"))
-    return render_template(
-        "admin_crachas.html",
-        crachas=local_db.listar_crachas(),
-    )
+    return render_template("admin_crachas.html", crachas=local_db.listar_crachas())
 
 @app.route("/admin/crachas/salvar", methods=["POST"])
 @login_obrigatorio
 def salvar_cracha():
+    """Vincula (ou re-vincula) um crachá a um usuário do Sapiens. salvar_cracha
+    é upsert, então crachá já cadastrado é atualizado em vez de duplicar - a
+    tela usa isso tanto no 'Cadastrar novo' quanto no 'Editar um já existente'."""
     if perfil_atual() != "G":
         return redirect(url_for("painel"))
     codigo_cracha = (request.form.get("codigo_cracha") or "").strip()
@@ -971,19 +971,21 @@ def salvar_cracha():
             "admin_crachas.html", crachas=local_db.listar_crachas(),
             erro=f"Código de usuário '{codusu}' não existe (ou está inativo) no Sapiens.",
         )
+    ja_existia = local_db.get_codusu_por_cracha(codigo_cracha) is not None
     local_db.salvar_cracha(
         codigo_cracha, dados["usuario"], dados["nome"], criado_por=session.get("usuario")
     )
-    # Nível de acesso (opcional). Só grava se algo foi escolhido - assim
-    # deixar em "Sem alteração" não apaga um perfil que a pessoa já tem.
+    # Nível de acesso: só grava se algo foi escolhido - "Não alterar" (vazio)
+    # não apaga um nível que a pessoa já tem.
     perfil = (request.form.get("perfil") or "").strip()
     if perfil in ("G", "B", "U", "__limpar__"):
         local_db.salvar_perfil(
             dados["usuario"], "" if perfil == "__limpar__" else perfil, dados["nome"]
         )
+    verbo = "atualizado" if ja_existia else "cadastrado"
     return render_template(
         "admin_crachas.html", crachas=local_db.listar_crachas(),
-        sucesso=f"Crachá vinculado a {dados['nome']} (código {dados['usuario']}).",
+        sucesso=f"Crachá {verbo}: {dados['nome']} (código {dados['usuario']}).",
     )
 
 @app.route("/admin/crachas/remover", methods=["POST"])
@@ -1060,6 +1062,7 @@ def entrega_item(codemp, codfil, numsol):
         # Processa UM item por vez (fila). O webservice de estoque só aceita um por vez.
         for item in itens_selecionados:
             qtd_entrega = float(item["qtd_atendida"]) - float(item["qtd_movimentada"])
+            estorno_a_compensar = False
             try:
                 # Estorna a reserva ANTES de transferir - senão o webservice
                 # calcula o saldo disponível já descontando a reserva feita
@@ -1067,6 +1070,7 @@ def entrega_item(codemp, codfil, numsol):
                 oracle_db.estornar_reserva_estoque(
                     codemp=codemp, coddep=coddep, codpro=item["codpro1"], qtd=qtd_entrega
                 )
+                estorno_a_compensar = True
 
                 sucesso, datmovws, mensagem_retorno = pedido_ws.transferencia_produtos(
                     itens=[item],
@@ -1078,11 +1082,18 @@ def entrega_item(codemp, codfil, numsol):
                 )
 
                 if not sucesso:
-                    oracle_db.reservar_estoque(codemp=codemp, coddep=coddep, codpro=item["codpro1"], qtd=qtd_entrega)
+                    # Transferência recusada: devolve a reserva que acabou de ser
+                    # estornada, senão uma nova tentativa estorna de novo e o
+                    # saldo fica negativo.
+                    oracle_db.reservar_estoque(
+                        codemp=codemp, coddep=coddep, codpro=item["codpro1"], qtd=qtd_entrega
+                    )
                     estorno_a_compensar = False
-                    falhas.append(...)
+                    falhas.append(f"{item['codpro2']}: {mensagem_retorno or 'falha na transferência'}")
                     continue
-                
+
+                # Transferência OK: o estorno da E210EST agora é o estado
+                # correto e não deve mais ser desfeito.
                 estorno_a_compensar = False
                 oracle_db.atualizar_mvp(
                     codemp=codemp, codpro=item["codpro1"],
@@ -1107,6 +1118,15 @@ def entrega_item(codemp, codfil, numsol):
                 )
                 entregues.append(item["codpro2"])
             except Exception as e:
+                # Se o estorno já foi feito e a transferência não se confirmou,
+                # devolve a reserva pra não deixar saldo negativo numa retentativa.
+                if estorno_a_compensar:
+                    try:
+                        oracle_db.reservar_estoque(
+                            codemp=codemp, coddep=coddep, codpro=item["codpro1"], qtd=qtd_entrega
+                        )
+                    except Exception:
+                        pass
                 falhas.append(f"{item['codpro2']}: {e}")
 
         # Deu tudo certo - volta pro painel

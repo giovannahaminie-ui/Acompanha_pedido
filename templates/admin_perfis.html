@@ -16,6 +16,13 @@
   </a>
 </div>
 
+<div class="filtro-perfil-row" style="margin-bottom:0.9rem;">
+  <label for="busca-usuario">Pesquisar</label>
+  <input type="search" id="busca-usuario" autocomplete="off"
+         placeholder="Nome, código do Sapiens ou código de barras"
+         style="flex:1 1 320px; max-width:440px;">
+</div>
+
 <div class="filtro-perfil-row">
   <label>Filtrar por nível</label>
   <span class="filtro-chip active" data-filter="__all__">
@@ -36,43 +43,38 @@
 </div>
 
 <div class="table-card">
-  <table>
+  <table class="tabela-usuarios">
     <thead>
       <tr>
-        <th>Usuário (Sapiens)</th>
-        <th>Perfil</th>
+        <th style="width:16%;">Usuário (Sapiens)</th>
+        <th style="width:32%;">Código de barras do crachá</th>
+        <th style="width:24%;">Perfil</th>
       </tr>
     </thead>
     <tbody>
       {% for u in usuarios %}
-      <tr data-perfil="{{ u.perfil or '' }}">
+      <tr data-perfil="{{ u.perfil or '' }}"
+          data-busca="{{ (u.nome ~ ' ' ~ u.usuario ~ ' ' ~ (u.crachas | join(' '))) | lower }}">
         <td>
           <div class="user-cell">
             <span class="avatar">{{ u.nome[:2]|upper }}</span>
             <div>
               <div class="user-name {{ 'perfil-' + u.perfil if u.perfil else '' }}">{{ u.nome }}</div>
-              <div class="user-code" style="display:flex; align-items:center; gap:0.5rem; margin-top:0.15rem;">
-                código {{ u.usuario }}
-                <span class="perfil-tag perfil-tag-{{ u.perfil if u.perfil else 'none' }}">
-                  {{ {'G': 'Gerência', 'B': 'Boqueta', 'U': 'Usinagem'}.get(u.perfil, 'Sem perfil') }}
-                </span>
-              </div>
+              <div class="user-code" style="margin-top:0.15rem;">código {{ u.usuario }}</div>
             </div>
           </div>
         </td>
         <td>
-          <form method="POST" action="{{ url_for('salvar_perfil') }}" style="display:flex; align-items:center;">
-            <input type="hidden" name="usuario" value="{{ u.usuario }}">
-            <input type="hidden" name="nome" value="{{ u.nome }}">
-            <span class="perfil-pill-select">
-              <select name="perfil" onchange="atualizarEtiqueta(this)">
-                <option value="" {{ 'selected' if not u.perfil else '' }}>Sem perfil</option>
-                <option value="G" {{ 'selected' if u.perfil == 'G' else '' }}>Gerência</option>
-                <option value="B" {{ 'selected' if u.perfil == 'B' else '' }}>Boqueta</option>
-                <option value="U" {{ 'selected' if u.perfil == 'U' else '' }}>Usinagem</option>
-              </select>
-            </span>
-          </form>
+          {% if u.crachas %}
+            {% for cod in u.crachas %}<code>{{ cod }}</code>{% if not loop.last %}<br>{% endif %}{% endfor %}
+          {% else %}
+            <span class="text-mute">— não cadastrado</span>
+          {% endif %}
+        </td>
+        <td>
+          <span class="perfil-tag perfil-tag-{{ u.perfil if u.perfil else 'none' }}">
+            {{ {'G': 'Gerência', 'B': 'Boqueta', 'U': 'Usinagem'}.get(u.perfil, 'Sem perfil') }}
+          </span>
         </td>
       </tr>
       {% endfor %}
@@ -80,51 +82,50 @@
   </table>
 </div>
 
-<p class="note">Cada usuário tem exatamente um perfil fixo.</p>
+<p class="note">
+  Só visualização. O nível de acesso é definido junto com o crachá em
+  <a href="{{ url_for('admin_crachas') }}">Cadastrar crachá</a>.
+</p>
 
 <script>
-  const LABELS_PERFIL = { G: 'Gerência', B: 'Boqueta', U: 'Usinagem', '': 'Sem perfil' };
-
-  // Atualiza a etiqueta e a cor do nome na hora, antes de recarregar a página
-  function atualizarEtiqueta(select) {
-    const perfil = select.value;
-    const row = select.closest('tr');
-    const nomeEl = row.querySelector('.user-name');
-    const tagEl = row.querySelector('.perfil-tag');
-
-    nomeEl.className = 'user-name' + (perfil ? ' perfil-' + perfil : '');
-    tagEl.className = 'perfil-tag perfil-tag-' + (perfil || 'none');
-    tagEl.textContent = LABELS_PERFIL[perfil];
-    row.dataset.perfil = perfil;
-
-    select.form.submit();
-  }
-
-  // Filtro por nível (chips) - só mostra/esconde, sem recarregar
+  // Filtros combinados: nível (chips) + pesquisa por texto - só mostra/esconde
   document.addEventListener('DOMContentLoaded', function () {
     const chips = document.querySelectorAll('.filtro-chip');
     const rows = document.querySelectorAll('.table-card tbody tr');
     const contagem = document.getElementById('contagemVisivel');
+    const busca = document.getElementById('busca-usuario');
+
+    let filtroNivel = '__all__';
+
+    function aplicar() {
+      const texto = (busca.value || '').trim().toLowerCase();
+      let visiveis = 0;
+      rows.forEach(row => {
+        const perfilLinha = row.dataset.perfil;
+        let okNivel;
+        if (filtroNivel === '__all__') okNivel = true;
+        else if (filtroNivel === '__none__') okNivel = (perfilLinha === '');
+        else okNivel = (perfilLinha === filtroNivel);
+
+        const okTexto = !texto || (row.dataset.busca || '').indexOf(texto) !== -1;
+
+        const mostrar = okNivel && okTexto;
+        row.style.display = mostrar ? '' : 'none';
+        if (mostrar) visiveis++;
+      });
+      if (contagem) contagem.textContent = visiveis;
+    }
 
     chips.forEach(chip => {
       chip.addEventListener('click', () => {
         chips.forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
-
-        const filtro = chip.dataset.filter;
-        let visiveis = 0;
-        rows.forEach(row => {
-          const perfilLinha = row.dataset.perfil;
-          let mostrar;
-          if (filtro === '__all__') mostrar = true;
-          else if (filtro === '__none__') mostrar = (perfilLinha === '');
-          else mostrar = (perfilLinha === filtro);
-          row.style.display = mostrar ? '' : 'none';
-          if (mostrar) visiveis++;
-        });
-        if (contagem) contagem.textContent = visiveis;
+        filtroNivel = chip.dataset.filter;
+        aplicar();
       });
     });
+
+    busca.addEventListener('input', aplicar);
   });
 </script>
 
