@@ -1078,9 +1078,12 @@ def entrega_item(codemp, codfil, numsol):
                 )
 
                 if not sucesso:
-                    falhas.append(f"{item['codpro2']}: {mensagem_retorno or 'falha na transferência'}")
+                    oracle_db.reservar_estoque(codemp=codemp, coddep=coddep, codpro=item["codpro1"], qtd=qtd_entrega)
+                    estorno_a_compensar = False
+                    falhas.append(...)
                     continue
-
+                
+                estorno_a_compensar = False
                 oracle_db.atualizar_mvp(
                     codemp=codemp, codpro=item["codpro1"],
                     numped=detalhe["solicitacao"]["numped"], seqipd=item["seqipd"],

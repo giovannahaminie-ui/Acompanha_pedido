@@ -1471,6 +1471,7 @@ def atualizar_entrega_e120sit(codemp, codfil, numsol, seqite, qtd, usuario, datm
     SQL = """
         UPDATE sapiens.USU_T120SIT SET
             usu_qtdmov = usu_qtdmov + :qtd,
+            usu_sitite = CASE WHEN usu_qtdmov + :qtd = usu_qtdate THEN 4 ELSE 2 END,
             usu_usuent = :usuario,
             usu_datent = :datent,
             usu_horent = :horent
