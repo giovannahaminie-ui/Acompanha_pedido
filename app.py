@@ -5,9 +5,10 @@ Acompanha Pedido API/FLASK - Estoque Retífica
 
 from datetime import datetime
 from functools import wraps
+import json
 import os
 
-from flask import Flask, render_template, request, redirect, url_for, session, current_app
+from flask import Flask, render_template, request, redirect, url_for, session, current_app, jsonify
 from dotenv import load_dotenv
 
 from db import local_db, oracle_db, pedido_ws
@@ -950,51 +951,89 @@ def admin_crachas():
         return redirect(url_for("painel"))
     return render_template("admin_crachas.html", crachas=local_db.listar_crachas())
 
+@app.route("/admin/crachas/nome-usuario")
+@login_obrigatorio
+def nome_usuario_cracha():
+    """Nome no Sapiens pelo código de usuário - a lista de 'Cadastrar novo' usa
+    isso pra mostrar a pessoa antes de salvar (conferência)."""
+    if perfil_atual() != "G":
+        return jsonify({"erro": "sem permissão"}), 403
+    codusu = (request.args.get("codusu") or "").strip()
+    dados = oracle_db.verificar_login(codusu) if codusu else None
+    if not dados:
+        return jsonify({"erro": "Código não encontrado (ou inativo) no Sapiens."}), 404
+    return jsonify({"codusu": dados["usuario"], "nome": dados["nome"]})
+
 @app.route("/admin/crachas/salvar", methods=["POST"])
 @login_obrigatorio
 def salvar_cracha():
-    """Vincula (ou re-vincula) um crachá a um usuário do Sapiens. salvar_cracha
-    é upsert, então crachá já cadastrado é atualizado em vez de duplicar - a
-    tela usa isso tanto no 'Cadastrar novo' quanto no 'Editar um já existente'."""
+    """Vincula crachá(s) a usuário(s) do Sapiens (upsert - crachá existente é
+    atualizado). Aceita os dois fluxos da tela:
+      - 'Cadastrar novo': campo 'itens' com um JSON [{codigo_cracha,codusu,perfil}, ...]
+      - 'Editar um já existente': campos soltos codigo_cracha/codusu/perfil (1 só)."""
     if perfil_atual() != "G":
         return redirect(url_for("painel"))
-    codigo_cracha = (request.form.get("codigo_cracha") or "").strip()
-    codusu = (request.form.get("codusu") or "").strip()
-    if not codigo_cracha or not codusu:
-        return render_template(
-            "admin_crachas.html", crachas=local_db.listar_crachas(),
-            erro="Passe o crachá e informe o código do Sapiens.",
+
+    lote_raw = request.form.get("itens")
+    if lote_raw:
+        try:
+            itens = json.loads(lote_raw)
+        except ValueError:
+            itens = []
+    else:
+        itens = [{
+            "codigo_cracha": request.form.get("codigo_cracha"),
+            "codusu": request.form.get("codusu"),
+            "perfil": request.form.get("perfil"),
+        }]
+
+    salvos, erros = [], []
+    for item in itens if isinstance(itens, list) else []:
+        codigo_cracha = (str(item.get("codigo_cracha") or "")).strip()
+        codusu = (str(item.get("codusu") or "")).strip()
+        perfil = (str(item.get("perfil") or "")).strip()
+        if not codigo_cracha or not codusu:
+            erros.append(f"{codigo_cracha or '(sem código)'}: faltou o código do crachá ou do Sapiens.")
+            continue
+        dados = oracle_db.verificar_login(codusu)
+        if not dados:
+            erros.append(f"{codigo_cracha}: código '{codusu}' não existe (ou está inativo) no Sapiens.")
+            continue
+        local_db.salvar_cracha(
+            codigo_cracha, dados["usuario"], dados["nome"], criado_por=session.get("usuario")
         )
-    dados = oracle_db.verificar_login(codusu)
-    if not dados:
-        return render_template(
-            "admin_crachas.html", crachas=local_db.listar_crachas(),
-            erro=f"Código de usuário '{codusu}' não existe (ou está inativo) no Sapiens.",
-        )
-    ja_existia = local_db.get_codusu_por_cracha(codigo_cracha) is not None
-    local_db.salvar_cracha(
-        codigo_cracha, dados["usuario"], dados["nome"], criado_por=session.get("usuario")
-    )
-    # Nível de acesso: só grava se algo foi escolhido - "Não alterar" (vazio)
-    # não apaga um nível que a pessoa já tem.
-    perfil = (request.form.get("perfil") or "").strip()
-    if perfil in ("G", "B", "U", "__limpar__"):
-        local_db.salvar_perfil(
-            dados["usuario"], "" if perfil == "__limpar__" else perfil, dados["nome"]
-        )
-    verbo = "atualizado" if ja_existia else "cadastrado"
-    return render_template(
-        "admin_crachas.html", crachas=local_db.listar_crachas(),
-        sucesso=f"Crachá {verbo}: {dados['nome']} (código {dados['usuario']}).",
-    )
+        # Nível: só mexe se algo foi escolhido - "Não alterar" (vazio) preserva.
+        if perfil in ("G", "B", "U", "__limpar__"):
+            local_db.salvar_perfil(
+                dados["usuario"], "" if perfil == "__limpar__" else perfil, dados["nome"]
+            )
+        salvos.append(f"{dados['nome']} ({dados['usuario']})")
+
+    ctx = {"crachas": local_db.listar_crachas()}
+    if salvos:
+        ctx["sucesso"] = f"{len(salvos)} crachá(s) salvo(s): " + ", ".join(salvos)
+    if erros:
+        ctx["erro"] = " | ".join(erros)
+    return render_template("admin_crachas.html", **ctx)
 
 @app.route("/admin/crachas/remover", methods=["POST"])
 @login_obrigatorio
 def remover_cracha():
+    """Remove um ou vários vínculos de crachá de uma vez (checkbox da lista)."""
     if perfil_atual() != "G":
         return redirect(url_for("painel"))
-    local_db.remover_cracha((request.form.get("codigo_cracha") or "").strip())
-    return redirect(url_for("admin_crachas"))
+    codigos = [c.strip() for c in request.form.getlist("codigos") if c.strip()]
+    # compat: chamada antiga com um único campo 'codigo_cracha'
+    unico = (request.form.get("codigo_cracha") or "").strip()
+    if unico and unico not in codigos:
+        codigos.append(unico)
+    for codigo in codigos:
+        local_db.remover_cracha(codigo)
+    return render_template(
+        "admin_crachas.html", crachas=local_db.listar_crachas(),
+        sucesso=(f"{len(codigos)} crachá(s) removido(s)." if codigos else None),
+        erro=(None if codigos else "Nenhum crachá selecionado."),
+    )
 
 @app.route("/")
 def index():

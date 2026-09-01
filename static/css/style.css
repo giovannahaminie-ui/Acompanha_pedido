@@ -652,6 +652,14 @@ table.clickable tbody tr:hover td { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03); 
 .tabela-itens th, .tabela-itens td { text-align: center; vertical-align: middle; }
 .tabela-itens .saldo-lista { align-items: center; }
 
+/* Listas de crachás (cadastrar / editar) - largura fixa em %, cabe inteira
+   no card, nada transborda nem gera barra horizontal. */
+.tabela-crachas { table-layout: fixed; width: 100%; }
+.tabela-crachas th, .tabela-crachas td { white-space: normal; word-break: break-word; padding: 0.5rem 0.5rem; }
+.table-card:has(> .tabela-crachas) { overflow-x: hidden; }
+.tabela-crachas .col-acao { text-align: center; }
+.tabela-crachas .col-acao .btn-trocar { padding: 5px 8px; }
+
 /* Tabela de Usuários e perfis - código de barras e perfil centralizados;
    a coluna do usuário fica alinhada à esquerda pros avatares ficarem
    rentes, um embaixo do outro. */
