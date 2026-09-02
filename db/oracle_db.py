@@ -1497,3 +1497,114 @@ def atualizar_entrega_e120sit(codemp, codfil, numsol, seqite, qtd, usuario, datm
     })
     conn.commit()
     conn.close()
+
+# ---------------------------------------------------------------------
+# Zerar conferencia - desfaz a conferencia com reserva da solicitacao
+# inteira (usar quando a conferencia foi feita errada). Para cada item
+# conferido mas ainda NAO entregue (usu_qtdate > usu_qtdmov):
+#   - USU_T120SIT: devolve a qtd conferida (nao entregue) pra qtd aberta,
+#     baixa usu_qtdate ate o que ja foi movimentado, limpa usu_usucon/
+#     datcon/horcon. NAO mexe em usu_sitite (a conferencia tambem nao mexe).
+#   - E210EST: estorna a reserva (qtdres) no deposito ligado a filial do
+#     pedido - mesma conta usada na conferencia.
+#   - E120IPD: estorna a reserva (qtdres) da linha do pedido; resest='N'
+#     quando nao sobra reserva.
+# No fim, volta a solicitacao (USU_T120SDG) pra "Em separacao" (5), SO se
+# a conferencia a tinha marcado como Atendida (usu_sitsol = 4).
+# Itens ja 100% entregues (usu_qtdmov = usu_qtdate) NAO sao tocados.
+# ---------------------------------------------------------------------
+SQL_ITENS_CONFERIDOS_SOLICITACAO = """
+                SELECT usu_seqite, usu_numped, usu_seqipd, usu_codpro,
+                       (NVL(usu_qtdate,0) - NVL(usu_qtdmov,0)) AS qtd_reverter
+                FROM sapiens.USU_T120SIT
+                WHERE usu_codemp = :codemp
+                AND usu_codfil = :codfil
+                AND usu_numsol = :numsol
+                AND usu_sitite <> 3
+                AND NVL(usu_qtdate,0) > NVL(usu_qtdmov,0)
+"""
+
+SQL_ZERAR_CONF_ITEM = """
+                UPDATE sapiens.USU_T120SIT
+                    SET usu_qtdabe = NVL(usu_qtdabe,0) + :qtd,
+                        usu_qtdate = NVL(usu_qtdmov,0),
+                        usu_usucon = NULL,
+                        usu_datcon = NULL,
+                        usu_horcon = NULL
+                WHERE usu_codemp = :codemp
+                AND usu_codfil = :codfil
+                AND usu_numsol = :numsol
+                AND usu_seqite = :seqite
+"""
+
+SQL_ESTORNAR_RESERVA_ITEM_PEDIDO = """
+                UPDATE sapiens.E120IPD
+                    SET qtdres = NVL(qtdres,0) - :qtd,
+                        resest = CASE WHEN NVL(qtdres,0) - :qtd > 0 THEN 'S' ELSE 'N' END
+                WHERE codemp = :codemp
+                AND codfil = :codfil
+                AND numped = :numped
+                AND seqipd = :seqipd
+"""
+
+SQL_ZERAR_CONF_SOLICITACAO = """
+                UPDATE sapiens.USU_T120SDG
+                    SET usu_sitsol = 5,
+                        usu_datcon = NULL,
+                        usu_horcon = NULL,
+                        usu_usucon = NULL
+                WHERE usu_codemp = :codemp
+                AND usu_codfil = :codfil
+                AND usu_numsol = :numsol
+                AND usu_sitsol = 4
+"""
+
+def zerar_conferencia(codemp, codfil, numsol):
+    """Desfaz a conferencia com reserva da solicitacao inteira. Retorna o
+    numero de itens revertidos. Itens ja entregues nao sao tocados."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(SQL_ITENS_CONFERIDOS_SOLICITACAO,
+                    codemp=codemp, codfil=codfil, numsol=numsol)
+        itens = cur.fetchall()
+
+        revertidos = 0
+        for seqite, numped, seqipd, codpro, qtd_reverter in itens:
+            if not qtd_reverter or qtd_reverter <= 0:
+                continue
+
+            # mesmo deposito usado na conferencia (ver conferencia_confirmar em app.py)
+            filexe = get_filial_pedido(codemp, codfil, numped)
+            coddep = get_coddep_esperado(codemp, filexe)
+            if not coddep:
+                raise RuntimeError(
+                    f"Nao identifiquei o deposito do item {seqite} (pedido {numped}) "
+                    f"- conferencia NAO foi zerada."
+                )
+
+            # 1) USU_T120SIT - volta a qtd pra "aberta", baixa a "atendida"
+            cur.execute(SQL_ZERAR_CONF_ITEM,
+                        qtd=qtd_reverter, codemp=codemp, codfil=codfil,
+                        numsol=numsol, seqite=seqite)
+            # 2) E210EST - estorna a reserva de estoque (reaproveita o SQL da entrega)
+            cur.execute(SQL_ESTORNAR_RESERVA_ESTOQUE,
+                        qtd=qtd_reverter, codemp=codemp, coddep=coddep, codpro=codpro)
+            # 3) E120IPD - estorna a reserva da linha do pedido
+            if seqipd:
+                cur.execute(SQL_ESTORNAR_RESERVA_ITEM_PEDIDO,
+                            qtd=qtd_reverter, codemp=codemp, codfil=codfil,
+                            numped=numped, seqipd=seqipd)
+            revertidos += 1
+
+        if revertidos:
+            cur.execute(SQL_ZERAR_CONF_SOLICITACAO,
+                        codemp=codemp, codfil=codfil, numsol=numsol)
+
+        conn.commit()
+        return revertidos
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

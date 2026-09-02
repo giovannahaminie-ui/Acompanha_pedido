@@ -487,6 +487,45 @@ def conferencia_confirmar(codemp, codfil, numsol):
     return _render_detalhe(codemp, codfil, numsol, erro_conf=erro, sucesso_conf=sucesso, painel_conf_aberto=True)
 
 # ---------------------------------------------------------------------
+# Zerar conferência - desfaz TODA a conferência com reserva da solicitação
+# (usar quando a conferência foi feita errada). Estorna as reservas de
+# estoque (E210EST) e de pedido (E120IPD), devolve os itens conferidos pra
+# "em aberto" e volta a solicitação pra "Em separação". Não mexe no que já
+# foi entregue.
+# ---------------------------------------------------------------------
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia/zerar", methods=["POST"])
+@login_obrigatorio
+def conferencia_zerar(codemp, codfil, numsol):
+    # limpa também os bipes ainda não confirmados (lista local)
+    for p in local_db.listar_itens_conferencia_pendentes(codemp, codfil, numsol):
+        local_db.remover_item_conferencia_pendente(p["id"])
+
+    try:
+        revertidos = oracle_db.zerar_conferencia(codemp, codfil, numsol)
+    except Exception as e:
+        return _render_detalhe(
+            codemp, codfil, numsol,
+            erro_conf=f"Falha ao zerar a conferência - nada foi alterado. {e}",
+            painel_conf_aberto=True,
+        )
+
+    local_db.registrar_acao(
+        tipo_acao="conferencia_zerada",
+        usuario=session["usuario"],
+        codemp=codemp, codfil=codfil, numsol=numsol,
+        detalhes=f"{revertidos} item(ns) revertido(s)",
+    )
+
+    if revertidos:
+        sucesso = (
+            f"Conferência zerada: {revertidos} item(ns) voltaram pra 'em aberto' "
+            f"e as reservas (estoque e pedido) foram estornadas."
+        )
+    else:
+        sucesso = "Não havia conferência pendente de estorno nessa solicitação."
+    return _render_detalhe(codemp, codfil, numsol, sucesso_conf=sucesso, painel_conf_aberto=True)
+
+# ---------------------------------------------------------------------
 # Troca de peça: cancela o item substituído no pedido + na solicitação e
 # inclui o item novo no pedido + na solicitação (usu_indtrc='S'). Mesma
 # lógica de confirmação manual em duas etapas do Inserir peça, mas com a
