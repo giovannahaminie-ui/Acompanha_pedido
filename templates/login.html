@@ -12,7 +12,7 @@
     <div class="auth-card">
       <div class="card-brand">RT</div>
       <p class="card-title">Entrar</p>
-      <p class="card-subtitle">Use o seu código de usuário do Sapiens</p>
+      <p class="card-subtitle">Escaneie o crachá ou insira seu código</p>
 
       {% if erro %}
         <div class="alert">
@@ -23,7 +23,7 @@
 
       <form method="POST">
         <div class="field">
-          <label for="usuario">Código do Sapiens ou crachá</label>
+          <label for="usuario">Código ou crachá</label>
           <input type="text" id="usuario" name="usuario" placeholder="Digite o código ou passe o crachá" required autofocus autocomplete="off">
         </div>
         <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">
@@ -31,7 +31,6 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
       </form>
-      <p class="note" style="text-align:center; margin-top:1.1rem;">Acesso pelo código de usuário do Sapiens</p>
     </div>
 
   </div>

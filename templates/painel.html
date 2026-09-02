@@ -69,13 +69,13 @@
       <div class="painel-filtro-campo" style="max-width:160px;">
         <label for="numped">O.S.</label>
         <input type="text" id="numped" name="numped" class="input-compact" inputmode="numeric"
-               placeholder="Número da O.S." value="{{ numped_selecionado or '' }}">
+               placeholder="Núm. OS" value="{{ numped_selecionado or '' }}">
       </div>
 
       <div class="painel-filtro-campo" style="max-width:160px;">
         <label for="numsol">Solicitação</label>
         <input type="text" id="numsol" name="numsol" class="input-compact" inputmode="numeric"
-               placeholder="Número da solicitação" value="{{ numsol_selecionado or '' }}">
+               placeholder="Núm. Solic." value="{{ numsol_selecionado or '' }}">
       </div>
 
       <div class="painel-filtro-campo" style="flex:none; align-self:flex-end;">
@@ -353,6 +353,9 @@
       })
       .catch(err => console.error('Erro ao atualizar painel:', err));
   }
-  setInterval(atualizarPainel, POLL_INTERVALO_MS);
+  setInterval(function () {
+    if (!document.hidden) atualizarPainel();
+  }, POLL_INTERVALO_MS);
+  
 </script>
 {% endblock %}

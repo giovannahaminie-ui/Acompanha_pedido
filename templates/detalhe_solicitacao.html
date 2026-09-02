@@ -385,30 +385,76 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
 </div>
 
 <div id="modal-zerar-conf" class="modal-alteracao">
-  <div class="modal-alteracao-content">
+  <div class="modal-alteracao-content" style="max-width:600px; width:92%;">
     <div class="modal-alteracao-icone modal-icone-erro">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
     </div>
-    <h2>Zerar a conferência?</h2>
+    <h2>Zerar conferência</h2>
     <p>
-      Isso vai <strong>estornar todas as reservas</strong> feitas na conferência
-      (estoque — E210EST — e pedido — E120IPD) e devolver os itens conferidos
-      pra <strong>"em aberto"</strong>, voltando a solicitação pra
-      <strong>"Em separação"</strong>. O que já foi <strong>entregue</strong>
-      não é afetado. Não dá pra desfazer.
+      Marque os itens com conferência errada. Ao confirmar, a reserva
+       é <strong>estornada</strong> e a
+      quantidade volta pra <strong>"em aberto"</strong>. O que já foi
+      <strong>entregue</strong> não é afetado. Não dá pra desfazer.
     </p>
-    <div class="modal-alteracao-acoes">
-      <button type="button" class="btn"
-              onclick="document.getElementById('modal-zerar-conf').classList.remove('aberto')">Cancelar</button>
-      <form method="POST"
-            action="{{ url_for('conferencia_zerar', codemp=codemp, codfil=codfil, numsol=numsol) }}"
-            style="flex:1;">
+
+    {% if itens_conferidos %}
+    <form method="POST" action="{{ url_for('conferencia_zerar', codemp=codemp, codfil=codfil, numsol=numsol) }}">
+      <div class="table-card" style="text-align:left; max-height:260px; overflow-y:auto; margin:0 0 1rem;">
+        <table class="tabela-itens" style="margin:0;">
+          <thead>
+            <tr>
+              <th style="width:2.2rem; text-align:center;"><input type="checkbox" id="zerar-conf-todos" title="Marcar todos"></th>
+              <th>Cód. Fab.</th>
+              <th>Produto</th>
+              <th>Descrição</th>
+              <th style="text-align:center;">Conf.</th>
+              <th style="text-align:center;">Entregue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in itens_conferidos %}
+            <tr>
+              <td style="text-align:center;">
+                <input type="checkbox" name="seqites" value="{{ item.seqite }}" class="zerar-conf-item">
+              </td>
+              <td class="mono">{{ item.codpro2 or '—' }}</td>
+              <td class="mono">{{ item.codpro1 or '—' }}</td>
+              <td style="white-space:normal;">{{ item.descricao_item or item.descricao or '—' }}</td>
+              <td style="text-align:center;">{{ item.qtd_atendida }}</td>
+              <td style="text-align:center;">{{ item.qtd_movimentada }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-alteracao-acoes">
+        <button type="button" class="btn"
+                onclick="document.getElementById('modal-zerar-conf').classList.remove('aberto')">Cancelar</button>
         <button type="submit" class="btn-primary"
-                style="width:100%; background:var(--red-600); border-color:var(--red-600);">Sim, zerar conferência</button>
-      </form>
+                style="flex:1; background:var(--red-600); border-color:var(--red-600);">Zerar conferência dos marcados</button>
+      </div>
+    </form>
+    {% else %}
+    <p><strong>Nenhum item conferido pendente</strong> nessa solicitação (ou tudo já foi entregue).</p>
+    <div class="modal-alteracao-acoes">
+      <button type="button" class="btn-primary" style="flex:1;"
+              onclick="document.getElementById('modal-zerar-conf').classList.remove('aberto')">OK</button>
     </div>
+    {% endif %}
   </div>
 </div>
+
+<script>
+  (function () {
+    var todos = document.getElementById('zerar-conf-todos');
+    if (!todos) return;
+    todos.addEventListener('change', function () {
+      document.querySelectorAll('.zerar-conf-item').forEach(function (cb) {
+        cb.checked = todos.checked;
+      });
+    });
+  })();
+</script>
 
 <div id="modal-status-inserir" class="modal-alteracao{{ ' aberto' if sucesso_inserir else '' }}">
   <div class="modal-alteracao-content">

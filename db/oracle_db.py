@@ -1499,9 +1499,10 @@ def atualizar_entrega_e120sit(codemp, codfil, numsol, seqite, qtd, usuario, datm
     conn.close()
 
 # ---------------------------------------------------------------------
-# Zerar conferencia - desfaz a conferencia com reserva da solicitacao
-# inteira (usar quando a conferencia foi feita errada). Para cada item
-# conferido mas ainda NAO entregue (usu_qtdate > usu_qtdmov):
+# Zerar conferencia - desfaz a conferencia com reserva SO dos itens
+# marcados (seqites) da solicitacao (usar quando a conferencia de algum
+# item foi feita errada). Para cada item conferido mas ainda NAO entregue
+# (usu_qtdate > usu_qtdmov):
 #   - USU_T120SIT: devolve a qtd conferida (nao entregue) pra qtd aberta,
 #     baixa usu_qtdate ate o que ja foi movimentado, limpa usu_usucon/
 #     datcon/horcon. NAO mexe em usu_sitite (a conferencia tambem nao mexe).
@@ -1510,7 +1511,8 @@ def atualizar_entrega_e120sit(codemp, codfil, numsol, seqite, qtd, usuario, datm
 #   - E120IPD: estorna a reserva (qtdres) da linha do pedido; resest='N'
 #     quando nao sobra reserva.
 # No fim, volta a solicitacao (USU_T120SDG) pra "Em separacao" (5), SO se
-# a conferencia a tinha marcado como Atendida (usu_sitsol = 4).
+# ela estava marcada como Atendida (usu_sitsol = 4) - qualquer item que
+# volta pra aberto ja tira a solicitacao de "totalmente atendida".
 # Itens ja 100% entregues (usu_qtdmov = usu_qtdate) NAO sao tocados.
 # ---------------------------------------------------------------------
 SQL_ITENS_CONFERIDOS_SOLICITACAO = """
@@ -1522,6 +1524,7 @@ SQL_ITENS_CONFERIDOS_SOLICITACAO = """
                 AND usu_numsol = :numsol
                 AND usu_sitite <> 3
                 AND NVL(usu_qtdate,0) > NVL(usu_qtdmov,0)
+                AND usu_seqite IN ({seqites})
 """
 
 SQL_ZERAR_CONF_ITEM = """
@@ -1559,14 +1562,21 @@ SQL_ZERAR_CONF_SOLICITACAO = """
                 AND usu_sitsol = 4
 """
 
-def zerar_conferencia(codemp, codfil, numsol):
-    """Desfaz a conferencia com reserva da solicitacao inteira. Retorna o
-    numero de itens revertidos. Itens ja entregues nao sao tocados."""
+def zerar_conferencia(codemp, codfil, numsol, seqites):
+    """Desfaz a conferencia com reserva dos itens `seqites` da solicitacao.
+    Retorna o numero de itens revertidos. Itens ja entregues nao sao tocados."""
+    seqites = [int(s) for s in (seqites or [])]
+    if not seqites:
+        return 0
+
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute(SQL_ITENS_CONFERIDOS_SOLICITACAO,
-                    codemp=codemp, codfil=codfil, numsol=numsol)
+        placeholders = ",".join(f":s{i}" for i in range(len(seqites)))
+        binds = {"codemp": codemp, "codfil": codfil, "numsol": numsol}
+        for i, s in enumerate(seqites):
+            binds[f"s{i}"] = s
+        cur.execute(SQL_ITENS_CONFERIDOS_SOLICITACAO.format(seqites=placeholders), binds)
         itens = cur.fetchall()
 
         revertidos = 0
@@ -1608,3 +1618,204 @@ def zerar_conferencia(codemp, codfil, numsol):
         raise
     finally:
         conn.close()
+
+# ---------------------------------------------------------------------
+# Consulta enxuta pro /api/.../itens-entrega do painel - para só descobrir
+# quais itens estão conferidos e ainda não entregues. 
+# (usu_qtdate > usu_qtdmov). NÃO monta cabeçalho/cliente/saldo por depósito 
+# (era o que o get_solicitacao_detalhe fazia - 1 query de saldo por item).
+# ---------------------------------------------------------------------
+
+SQL_ITENS_PARA_ENTREGA = """
+                SELECT i.usu_seqite, 
+                       i.usu_seqipd,
+                       i.usu_codpro,
+                       a.usu_codpro2,
+                       a.despro,
+                       NVL(i.usu_qtdabe,0), 
+                       NVL(i.usu_qtdate,0),
+                       NVL(i.usu_qtdmov,0)
+                FROM sapiens.USU_T120SIT i
+                LEFT JOIN sapiens.E075PRO a ON a.codemp = i.usu_codemp 
+                AND a.codpro = i.usu_codpro
+                WHERE i.usu_codemp = :codemp
+                AND i.usu_codfil = :codfil
+                AND i.usu_numsol = :numsol
+                AND NVL(i.usu_qtdate,0) > NVL(i.usu_qtdmov,0)
+                ORDER BY i.usu_seqite
+"""
+
+def listar_itens_para_entrega(codemp, codfil, numsol):
+    """Lista os itens da solicitacao que estao conferidos e ainda nao entregues
+    (usu_qtdate > usu_qtdmov). Retorna lista de dicts com seqite/seqipd/codpro/
+    codpro2/despro/qtd_aberta/qtd_conferida/qtd_entregue."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_ITENS_PARA_ENTREGA, codemp=codemp, codfil=codfil, numsol=numsol)
+    rows = cur.fetchall()
+    conn.close()
+    return [
+        {
+            "seqite": seqite,
+            "seqipd": seqipd,
+            "codpro1": codpro,
+            "codpro2": codpro2,
+            "descricao": despro,
+            "qtd_aberta": float(qtdabe),
+            "qtd_atendida": float(qtdate),
+            "qtd_movi": float(qtdmov),
+        }
+        for seqite, seqipd, codpro, codpro2, despro, qtdabe, qtdate, qtdmov in rows
+    ]
+
+# ---------------------------------------------------------------------
+# Finaliza a solicitacao apos a entrega - marca usu_sitsol=6 (Entregue)
+# SOMENTE quando nao existe mais item pendente: nada em aberto
+# (usu_qtdabe > 0) e nada conferido a entregar (usu_qtdate <> usu_qtdmov).
+# Se ainda sobrar item, o NOT EXISTS nao bate, o UPDATE nao afeta linha
+# nenhuma e a situacao continua 4.
+# ---------------------------------------------------------------------
+
+SQL_FINALIZAR_SOLICITACAO_ENTREGUE = """
+                UPDATE sapiens.USU_T120SDG s
+                SET s.usu_sitsol = 6,
+                    s.usu_datent = :datent,
+                    s.usu_horent = :horent,
+                    s.usu_usuent = :usuent
+                WHERE s.usu_codemp = :codemp
+                  AND s.usu_codfil = :codfil
+                  AND s.usu_numsol = :numsol
+                  AND NOT EXISTS (
+                SELECT 1
+                FROM sapiens.USU_T120SIT i
+                      WHERE i.usu_codemp = s.usu_codemp
+                        AND i.usu_codfil = s.usu_codfil
+                        AND i.usu_numsol = s.usu_numsol
+                        AND (i.usu_qtdabe > 0 OR i.usu_qtdate <> i.usu_qtdmov)
+                        )
+            """
+
+def finalizar_solicitacao_entregue(codemp, codfil, numsol, usuario):
+    """Marca a solicitacao como entregue (usu_sitsol=6) apenas se nao existir
+    mais item pendente (nada em aberto e nada conferido a entregar)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    agora = datetime.now()
+    cur.execute(
+        SQL_FINALIZAR_SOLICITACAO_ENTREGUE, 
+        datent=agora.date(),
+        horent=agora.hour * 60 + agora.minute,
+        usuent=int(usuario),
+        codemp=codemp,
+        codfil=codfil,
+        numsol=numsol
+    )
+    afetadas = cur.rowcount
+    conn.commit()
+    conn.close()
+    return afetadas > 0
+
+# ---------------------------------------------------------------------
+# Depois de cancelar um item: se nao sobrou nenhum item em aberto
+# (usu_qtdabe > 0), a conferencia da solicitacao acabou (o que faltava
+# foi cancelado) - marca o cabecalho como Atendido (usu_sitsol=4) com
+# data/hora/usuario da conferencia. Nao mexe se ja estiver 4 ou 6.
+# ---------------------------------------------------------------------
+SQL_MARCAR_CONFERENCIA_CONCLUIDA = """
+                UPDATE sapiens.USU_T120SDG s
+                SET s.usu_sitsol = 4,
+                    s.usu_datcon = :datcon,
+                    s.usu_horcon = :horcon,
+                    s.usu_usucon = :usucon
+                WHERE s.usu_codemp = :codemp
+                  AND s.usu_codfil = :codfil
+                  AND s.usu_numsol = :numsol
+                  AND s.usu_sitsol NOT IN (4, 6)
+                  AND NOT EXISTS ( 
+                  SELECT 1 FROM sapiens.USU_T120SIT i
+                  WHERE i.usu_codemp = s.usu_codemp
+                    AND i.usu_codfil = s.usu_codfil
+                    AND i.usu_numsol = s.usu_numsol
+                    AND i.usu_qtdabe > 0)
+            """
+
+def marcar_conferencia_concluida(codemp, codfil, numsol, usuario):
+    """Marca a solicitacao como atendida (usu_sitsol=4) apenas se nao existir
+    mais item em aberto (usu_qtdabe > 0). Usado quando o último item da
+    solicitacao foi cancelado, ou seja, a conferencia acabou porque o que
+    faltava foi cancelado. Nao mexe se ja estiver 4 ou 6."""
+    conn = get_connection()
+    cur = conn.cursor()
+    agora = datetime.now()
+    cur.execute(
+        SQL_MARCAR_CONFERENCIA_CONCLUIDA,
+        datcon=agora.date(),
+        horcon=agora.hour * 60 + agora.minute,
+        usucon=int(usuario),
+        codemp=codemp,
+        codfil=codfil,
+        numsol=numsol
+    )
+    afetadas = cur.rowcount
+    conn.commit()
+    conn.close()
+    return afetadas > 0
+
+# ---------------------------------------------------------------------
+# Varredura periodica (rede de seguranca) - conserta o usu_sitsol de
+# solicitacoes cujos itens ja resolveram mas o cabecalho ficou preso
+# (ex: item cancelado/entregue direto no Sapiens). Roda a cada N minutos.
+#   - nada em aberto E nada pendente de entrega -> 6 (Entregue)
+#   - nada em aberto (ainda tem conferido a entregar) -> 4 (Atendido)
+# ---------------------------------------------------------------------
+SQL_SWEEP_FINALIZA = """
+                UPDATE sapiens.USU_T120SDG s
+                    SET s.usu_sitsol = 6,
+                        s.usu_datent = :dt,
+                        s.usu_horent = :hr
+                WHERE s.usu_sitsol IN (1, 2, 4, 5)
+                AND s.usu_datsol >= SYSDATE - :dias
+                AND EXISTS (SELECT 1 FROM sapiens.USU_T120SIT x
+                            WHERE x.usu_codemp = s.usu_codemp
+                            AND x.usu_codfil = s.usu_codfil
+                            AND x.usu_numsol = s.usu_numsol)
+                AND NOT EXISTS (SELECT 1 FROM sapiens.USU_T120SIT i
+                            WHERE i.usu_codemp = s.usu_codemp
+                            AND i.usu_codfil = s.usu_codfil
+                            AND i.usu_numsol = s.usu_numsol
+                            AND (i.usu_qtdabe > 0 OR i.usu_qtdate <> i.usu_qtdmov))
+"""
+
+SQL_SWEEP_ATENDE = """
+                UPDATE sapiens.USU_T120SDG s
+                    SET s.usu_sitsol = 4,
+                        s.usu_datcon = :dt,
+                        s.usu_horcon = :hr
+                WHERE s.usu_sitsol IN (1, 2, 5)
+                AND s.usu_datsol >= SYSDATE - :dias
+                AND EXISTS (SELECT 1 FROM sapiens.USU_T120SIT x
+                            WHERE x.usu_codemp = s.usu_codemp
+                            AND x.usu_codfil = s.usu_codfil
+                            AND x.usu_numsol = s.usu_numsol)
+                AND NOT EXISTS (SELECT 1 FROM sapiens.USU_T120SIT i
+                            WHERE i.usu_codemp = s.usu_codemp
+                            AND i.usu_codfil = s.usu_codfil
+                            AND i.usu_numsol = s.usu_numsol
+                            AND i.usu_qtdabe > 0)
+"""
+
+def varrer_situacao_solicitacoes(dias=180):
+    """Varre solicitacoes recentes (dias) e corrige o usu_sitsol do cabecalho
+    quando os itens ja resolveram mas o cabecalho ficou preso. Retorna tupla
+    (atendidas, entregues) com a quantidade de solicitacoes atualizadas."""
+    conn = get_connection()
+    cur = conn.cursor()
+    agora = datetime.now()
+    horcon = agora.hour * 60 + agora.minute
+    cur.execute(SQL_SWEEP_FINALIZA, dt=agora.date(), hr=horcon, dias=dias)
+    n_final = cur.rowcount
+    cur.execute(SQL_SWEEP_ATENDE, dt=agora.date(), hr=horcon, dias=dias)
+    n_atend = cur.rowcount
+    conn.commit()
+    conn.close()
+    return n_atend, n_final

@@ -17,6 +17,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
+from logging.handlers import RotatingFileHandler
 
 load_dotenv()
 
@@ -37,7 +38,7 @@ _XML_DIR.mkdir(exist_ok=True)
 logger = logging.getLogger("pedido_ws")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
-    _handler = logging.FileHandler(_LOG_DIR / "pedido_ws_envelopes.log", encoding="utf-8")
+    _handler = RotatingFileHandler(_LOG_DIR / "pedido_ws_envelopes.log", maxBytes=5_000_000,backupCount=3, encoding="utf-8")
     _handler.setFormatter(logging.Formatter("\n%(asctime)s [%(levelname)s]\n%(message)s"))
     logger.addHandler(_handler)
 
@@ -53,18 +54,30 @@ def _fmt_numero(valor):
         return None
     return str(valor).replace(".", ",")
 
+# ---------------------------------------------------------------------
+#   Cache dos clientes zeep, para ser otmizado o webservice 
+#   na ação de trocar item.
+# ---------------------------------------------------------------------
+
+_ws_clients = {}
+
+def _client_para(wsdl):
+    cached = _ws_clients.get(wsdl)
+    if cached is None:
+        import zeep
+        from zeep.plugins import HistoryPlugin
+        history = HistoryPlugin()
+        client = zeep.Client(wsdl, plugins=[history])
+        _ws_clients[wsdl]= cached = (client, history)
+    return cached
+
 def _get_client():
     if not (PEDIDO_WS_WSDL and PEDIDO_WS_USER and PEDIDO_WS_PASSWORD):
         raise PedidoWebserviceError(
             "Webservice de pedidos não configurado - faltam PEDIDO_WS_WSDL/"
             "PEDIDO_WS_USER/PEDIDO_WS_PASSWORD no .env."
         )
-    import zeep
-    from zeep.plugins import HistoryPlugin
-
-    history = HistoryPlugin()
-    client = zeep.Client(PEDIDO_WS_WSDL, plugins=[history])
-    return client, history
+    return _client_para(PEDIDO_WS_WSDL)
 
 def _envelope_para_texto(entrada_historico):
     """Serializa o envelope SOAP (capturado pelo zeep HistoryPlugin) pra XML
@@ -287,12 +300,8 @@ def _get_client_compra():
             "Webservice de solicitação de compra não configurado - faltam "
             "COMPRA_WS_WSDL/COMPRA_WS_USER/COMPRA_WS_PASSWORD no .env."
         )
-    import zeep
-    from zeep.plugins import HistoryPlugin
 
-    history = HistoryPlugin()
-    client = zeep.Client(COMPRA_WS_WSDL, plugins=[history])
-    return client, history
+    return _client_para(COMPRA_WS_WSDL)
 
 def gerar_solicitacao_compra_lote(codemp, numsol_compra, itens, usu_sol):
     """Grava uma única solicitação de compra (numsol_compra) com todos os
@@ -363,11 +372,7 @@ def _get_client_oc():
             "Webservice de Ordem de Compra não configurado - faltam "
             "OC_WS_WSDL/OC_WS_USER/OC_WS_PASSWORD no .env."
         )
-    import zeep
-    from zeep.plugins import HistoryPlugin
-    history = HistoryPlugin()
-    client = zeep.Client(OC_WS_WSDL, plugins=[history])
-    return client, history
+    return _client_para(OC_WS_WSDL)
 
 def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped, coddep=None):
     """itens: lista de dicts {codpro, qtd, preco}.
@@ -434,10 +439,7 @@ def _get_client_estoque():
             "ESTOQUE_WS_USER/ESTOQUE_WS_PASSWORD no .env."
         )
     
-    import zeep
-    history = HistoryPlugin()
-    client = zeep.Client(ESTOQUE_WS_WSDL, plugins=[history])
-    return client, history
+    return _client_para(ESTOQUE_WS_WSDL)
 
 def _depositos_transferencia(codemp, filexe):
     """codDep de saída/entrada da TransferenciaProdutos - depende da empresa

@@ -231,6 +231,12 @@ def _render_detalhe(
         i for i in dados["itens"]
         if i["sitite"] in (1, 2) and i["qtd_atendida"] < i["qtd_solic"]
     ]
+    # Itens que JÁ foram conferidos e ainda não entregues - o modal "Zerar
+    # conferência" lista esses pra a pessoa marcar qual estornar.
+    itens_conferidos = [
+        i for i in dados["itens"]
+        if i["qtd_atendida"] > i["qtd_movimentada"]
+    ]
     return render_template(
         "detalhe_solicitacao.html",
         solicitacao=dados["solicitacao"],
@@ -246,6 +252,7 @@ def _render_detalhe(
         pendentes_conferencia=pendentes_conferencia,
         erro_conf=erro_conf, sucesso_conf=sucesso_conf,
         painel_conf_aberto=painel_conf_aberto or bool(pendentes_conferencia),
+        itens_conferidos=itens_conferidos,
     )
 
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>")
@@ -301,13 +308,18 @@ def cancelar_item(codemp, codfil, numsol, seqite):
             erro = "Não há quantidade em aberto para cancelar."
         else:
             oracle_db.cancelar_item_solicitacao(codemp, codfil, numsol, seqite, session["usuario"], motivo=motivo)
+            # Cancelar pode "fechar" a solicitação:
+            #  - se não sobrou item em aberto  -> Atendido (usu_sitsol=4)
+            #  - se além disso já entregou tudo -> Entregue (usu_sitsol=6)
+            oracle_db.marcar_conferencia_concluida(codemp, codfil, numsol, session["usuario"])
+            oracle_db.finalizar_solicitacao_entregue(codemp, codfil, numsol, session["usuario"])
             return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
     return render_template(
         "cancelar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
         item=item, erro=erro, motivo=motivo,
     )
-
+            
 # ---------------------------------------------------------------------
 # Inserir peça nova na solicitação + no pedido (webservice GravarPedidos_15).
 # Painel embutido na própria tela de detalhe (não é mais página/modal
@@ -481,27 +493,30 @@ def conferencia_confirmar(codemp, codfil, numsol):
         sucesso_count += 1
 
     if sucesso_count:
-        oracle_db.atualizar_situacao_atendida(codemp, codfil, numsol)
+        oracle_db.marcar_conferencia_concluida(codemp, codfil, numsol, session["usuario"])
 
     sucesso = f"{sucesso_count} item(ns) conferido(s) e reservado(s) com sucesso" if sucesso_count else None
     return _render_detalhe(codemp, codfil, numsol, erro_conf=erro, sucesso_conf=sucesso, painel_conf_aberto=True)
 
 # ---------------------------------------------------------------------
-# Zerar conferência - desfaz TODA a conferência com reserva da solicitação
-# (usar quando a conferência foi feita errada). Estorna as reservas de
-# estoque (E210EST) e de pedido (E120IPD), devolve os itens conferidos pra
+# Zerar conferência - estorna a conferência com reserva SÓ dos itens
+# marcados (E210EST.qtdres e E120IPD.qtdres), devolve a qtd conferida pra
 # "em aberto" e volta a solicitação pra "Em separação". Não mexe no que já
 # foi entregue.
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia/zerar", methods=["POST"])
 @login_obrigatorio
 def conferencia_zerar(codemp, codfil, numsol):
-    # limpa também os bipes ainda não confirmados (lista local)
-    for p in local_db.listar_itens_conferencia_pendentes(codemp, codfil, numsol):
-        local_db.remover_item_conferencia_pendente(p["id"])
+    seqites = [int(s) for s in request.form.getlist("seqites")]
+    if not seqites:
+        return _render_detalhe(
+            codemp, codfil, numsol,
+            erro_conf="Marque pelo menos um item pra zerar a conferência.",
+            painel_conf_aberto=True,
+        )
 
     try:
-        revertidos = oracle_db.zerar_conferencia(codemp, codfil, numsol)
+        revertidos = oracle_db.zerar_conferencia(codemp, codfil, numsol, seqites)
     except Exception as e:
         return _render_detalhe(
             codemp, codfil, numsol,
@@ -509,20 +524,19 @@ def conferencia_zerar(codemp, codfil, numsol):
             painel_conf_aberto=True,
         )
 
-    local_db.registrar_acao(
-        tipo_acao="conferencia_zerada",
-        usuario=session["usuario"],
-        codemp=codemp, codfil=codfil, numsol=numsol,
-        detalhes=f"{revertidos} item(ns) revertido(s)",
-    )
-
     if revertidos:
+        local_db.registrar_acao(
+            tipo_acao="conferencia_zerada",
+            usuario=session["usuario"],
+            codemp=codemp, codfil=codfil, numsol=numsol,
+            detalhes=f"{revertidos} item(ns) revertido(s) - seqites {seqites}",
+        )
         sucesso = (
-            f"Conferência zerada: {revertidos} item(ns) voltaram pra 'em aberto' "
-            f"e as reservas (estoque e pedido) foram estornadas."
+            f"Conferência zerada em {revertidos} item(ns): reservas estornadas "
+            f"e quantidade de volta pra 'em aberto'."
         )
     else:
-        sucesso = "Não havia conferência pendente de estorno nessa solicitação."
+        sucesso = "Os itens marcados não tinham conferência a estornar."
     return _render_detalhe(codemp, codfil, numsol, sucesso_conf=sucesso, painel_conf_aberto=True)
 
 # ---------------------------------------------------------------------
@@ -1082,31 +1096,8 @@ def index():
 @login_obrigatorio
 def api_itens_entrega(codemp, codfil, numsol):
     """Retorna JSON com itens disponíveis para entrega."""
-    from flask import jsonify
-    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
 
-    if not detalhe:
-        return jsonify({"error": "Solicitação não encontrada"}), 404
-
-    itens_entrega = []
-    for i in detalhe["itens"]:
-        qtd_atendida = float(str(i["qtd_atendida"]).replace(",","."))
-        qtd_aberta = float(str(i["qtd_aberta"]).replace(",","."))
-        qtd_movi = float(str(i["qtd_movimentada"]).replace(",","."))
-
-        if qtd_atendida > qtd_movi:
-            itens_entrega.append({
-            "seqite": i["seqite"],
-            "codpro2": i["codpro2"],
-            "codpro1": i["codpro1"],
-            "descricao": i["descricao"],
-            "qtd_aberta": qtd_aberta,
-            "qtd_atendida": qtd_atendida,
-            "qtd_movi": qtd_movi,
-            "seqipd": i["seqipd"]
-        })
-
-    return jsonify({"itens": itens_entrega})
+    return jsonify({"itens": oracle_db.get_itens_entrega(codemp, codfil, numsol)})
 
 
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/entrega", methods=["GET", "POST"])
@@ -1207,6 +1198,12 @@ def entrega_item(codemp, codfil, numsol):
                         pass
                 falhas.append(f"{item['codpro2']}: {e}")
 
+        # Se a entrega completou a solicitação (nada em aberto e nada
+        # conferido a entregar), marca como Entregue (usu_sitsol=6). Se
+        # ainda sobrou item, o NOT EXISTS não bate e a situação continua 4.
+        if entregues:
+            oracle_db.finalizar_solicitacao_entregue(codemp, codfil, numsol, session["usuario"])
+
         # Deu tudo certo - volta pro painel
         if not falhas:
             return redirect(url_for("painel"))
@@ -1231,4 +1228,4 @@ def entrega_item(codemp, codfil, numsol):
     )
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=5051)
+    serve(app, host="0.0.0.0", port=5051)
