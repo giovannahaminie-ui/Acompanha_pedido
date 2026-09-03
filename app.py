@@ -683,7 +683,11 @@ def trocar_item(codemp, codfil, numsol, seqite):
                             codemp, codfil, numsol, seqite_novo, msg_troca,
                         )
                     sucesso_troca = f"Troca concluída: {item['codpro']} trocado por {produto['codpro']} - {produto['descricao']}."
-                    return _render_detalhe(codemp, codfil, numsol, sucesso_troca=sucesso_troca)
+                    if alerta_preco:
+                        _mark("oracle salvar_observacao_item")
+                    resposta = _render_detalhe(codemp, codfil, numsol, sucesso_troca=sucesso_troca)
+                    _mark("_render_detalhe (get_solicitacao_detalhe + template)")
+                    return resposta
                 except pedido_ws.PedidoWebserviceError as e:
                     erro = (
                         f"O item substituído JÁ FOI CANCELADO, mas a inclusão do item novo falhou: {e} "
