@@ -52,13 +52,30 @@
 </div>
 
 <script>
-  function copiarProforETrocar(profor, urlTrocar) {
-    const irParaTroca = () => { window.location.href = urlTrocar; };
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(profor).then(irParaTroca, irParaTroca);
-    } else {
-      irParaTroca();
+  function copiarTexto(texto) {
+    try { sessionStorage.setItem('ultimoCodigoCopiado', texto); } catch (e) {}
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(texto);
     }
+    return new Promise(function (resolve) {
+      var ta = document.createElement('textarea');
+      ta.value = texto;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      resolve();
+    });
+  }
+
+  function copiarProforETrocar(profor, urlTrocar) {
+    copiarTexto(profor).then(
+      function () { window.location.href = urlTrocar; },
+      function () { window.location.href = urlTrocar; }
+    );
   }
 </script>
 {% endblock %}

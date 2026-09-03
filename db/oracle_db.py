@@ -1691,7 +1691,7 @@ SQL_FINALIZAR_SOLICITACAO_ENTREGUE = """
                       WHERE i.usu_codemp = s.usu_codemp
                         AND i.usu_codfil = s.usu_codfil
                         AND i.usu_numsol = s.usu_numsol
-                        AND (i.usu_qtdabe > 0 OR i.usu_qtdate <> i.usu_qtdmov)
+                        AND (NVL(i.usu_qtdabe,0) > 0 OR NVL(i.usu_qtdate,0) <> NVL(i.usu_qtdmov,0))
                         )
             """
 
@@ -1736,7 +1736,7 @@ SQL_MARCAR_CONFERENCIA_CONCLUIDA = """
                   WHERE i.usu_codemp = s.usu_codemp
                     AND i.usu_codfil = s.usu_codfil
                     AND i.usu_numsol = s.usu_numsol
-                    AND i.usu_qtdabe > 0)
+                    AND NVL(i.usu_qtdabe,0) > 0)
             """
 
 def marcar_conferencia_concluida(codemp, codfil, numsol, usuario):
@@ -1783,7 +1783,7 @@ SQL_SWEEP_FINALIZA = """
                             WHERE i.usu_codemp = s.usu_codemp
                             AND i.usu_codfil = s.usu_codfil
                             AND i.usu_numsol = s.usu_numsol
-                            AND (i.usu_qtdabe > 0 OR i.usu_qtdate <> i.usu_qtdmov))
+                                                       AND (NVL(i.usu_qtdabe,0) > 0 OR NVL(i.usu_qtdate,0) <> NVL(i.usu_qtdmov,0)))
 """
 
 SQL_SWEEP_ATENDE = """

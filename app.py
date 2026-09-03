@@ -7,6 +7,7 @@ from datetime import datetime
 from functools import wraps
 import json
 import os
+import time
 
 from flask import Flask, render_template, request, redirect, url_for, session, current_app, jsonify
 from dotenv import load_dotenv
@@ -461,6 +462,16 @@ def conferencia_remover(codemp, codfil, numsol, id_pendente):
     local_db.remover_item_conferencia_pendente(id_pendente)
     return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia/remover-varios", methods=["POST"])
+@login_obrigatorio
+def conferencia_remover_varios(codemp, codfil, numsol):
+    for x in request.form.getlist("ids"):
+        try:
+            local_db.remover_item_conferencia_pendente(int(x))
+        except (TypeError, ValueError):
+            pass
+    return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/conferencia/confirmar", methods=["POST"])
 @login_obrigatorio
 def conferencia_confirmar(codemp, codfil, numsol):
@@ -468,34 +479,38 @@ def conferencia_confirmar(codemp, codfil, numsol):
     if not pendentes:
         return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
-    erro = None
+    erros = []
     sucesso_count = 0
     for p in pendentes:
-        codpro = oracle_db.resolver_codpro_conferencia(codemp, p["codbar"])
+        try:
+            codpro = oracle_db.resolver_codpro_conferencia(codemp, p["codbar"])
+            if not codpro:
+                erros.append(f"{p['codbar']}: código não encontrado (derivação / código de barras / produto).")
+                continue
 
-        if not codpro: 
-            erro = f"Código {p['codbar']} não encontrado (nem como derivação, nem código de barras, nem produto. Verificar)."
-            break
+            item = oracle_db.get_item_para_conferencia(codemp, codfil, numsol, codpro)
+            if not item:
+                erros.append(f"{codpro}: sem item em aberto nessa solicitação.")
+                continue
 
-        item = oracle_db.get_item_para_conferencia(codemp, codfil, numsol, codpro)
-        if not item:
-            erro = f"Produto {codpro} não possui item em aberto nessa solicitação."
-            break
-        if p["qtd"] > item["qtd_aberta"]:
-            erro = f"Quantidade conferida ({p['qtd']}) é maior que a quantidade em aberto ({item['qtd_aberta']}) do produto {codpro}."
-            break
+            if p["qtd"] > item["qtd_aberta"]:
+                erros.append(f"{codpro}: quantidade {p['qtd']} maior que em aberto ({item['qtd_aberta']}).")
+                continue
 
-        filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
-        coddep = oracle_db.get_coddep_esperado(codemp, filexe)
-        item["codpro"] = codpro
-        oracle_db.conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, p["qtd"], p["usuario"])
-        local_db.remover_item_conferencia_pendente(p["id"])
-        sucesso_count += 1
+            filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
+            coddep = oracle_db.get_coddep_esperado(codemp, filexe)
+            item["codpro"] = codpro
+            oracle_db.conferir_item_com_reserva(codemp, codfil, numsol, item, coddep, p["qtd"], p["usuario"])
+            local_db.remover_item_conferencia_pendente(p["id"])
+            sucesso_count += 1
+        except Exception as e:
+            erros.append(f"{p['codbar']}: falha ao conferir - {e}")
 
     if sucesso_count:
         oracle_db.marcar_conferencia_concluida(codemp, codfil, numsol, session["usuario"])
 
-    sucesso = f"{sucesso_count} item(ns) conferido(s) e reservado(s) com sucesso" if sucesso_count else None
+    sucesso = f"{sucesso_count} item(ns) conferido(s) e reservado(s) com sucesso." if sucesso_count else None
+    erro = " | ".join(erros) if erros else None
     return _render_detalhe(codemp, codfil, numsol, erro_conf=erro, sucesso_conf=sucesso, painel_conf_aberto=True)
 
 # ---------------------------------------------------------------------
@@ -548,13 +563,23 @@ def conferencia_zerar(codemp, codfil, numsol):
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/trocar", methods=["GET", "POST"])
 @login_obrigatorio
 def trocar_item(codemp, codfil, numsol, seqite):
+    # --- cronometragem (debug de lentidão da troca) - remover depois ---
+    _t = [time.perf_counter()]
+    def _mark(nome):
+        agora = time.perf_counter()
+        print(f"[TROCA numsol={numsol} seq={seqite}] {nome}: {agora - _t[0]:.2f}s", flush=True)
+        _t[0] = agora
+    # ------------------------------------------------------------------
+
     item = oracle_db.get_item_solicitacao(codemp, codfil, numsol, seqite)
+    _mark("get_item_solicitacao")
     if not item:
         return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
     item_pedido = None
     if item["seqipd"]:
         item_pedido = oracle_db.get_item_pedido(codemp, codfil, item["numped"], item["seqipd"])
+        _mark("get_item_pedido")
 
     if item["qtd_movimentada"]:
         return render_template(
@@ -587,6 +612,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
                 produto = oracle_db.buscar_produto_preco(codemp, codfil, item["numped"], codpro_novo)
             except oracle_db.ProdutoAmbiguoError as e:
                 erro = str(e)
+            _mark("buscar_produto_preco")
             if not erro:
                 if not produto:
                     erro = f"Produto {codpro_novo} não foi encontrado."
@@ -596,6 +622,7 @@ def trocar_item(codemp, codfil, numsol, seqite):
                     erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
                 elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], produto["codpro"]):
                     erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
+                _mark("produto_tem_ligacao_deposito")
 
         # Produto passou por todas as checagens - mostra a etapa de
         # confirmação mesmo que a autorização de preço ainda falte (ver
@@ -614,11 +641,14 @@ def trocar_item(codemp, codfil, numsol, seqite):
             erro = "A diferença de preço passou da tolerância - informe quem autorizou a troca."
 
         if mostrar_confirmacao and not erro and request.form.get("confirmar"):
+            _mark("ate confirmar (validacoes)")
             try:
                 pedido_ws.cancelar_item_pedido(
                     codemp, codfil, item["numped"], item["seqipd"], qtd, session["usuario"],
                 )
+                _mark("SOAP cancelar_item_pedido")
                 oracle_db.cancelar_qtd_item_solicitacao_troca(codemp, codfil, numsol, seqite, qtd)
+                _mark("oracle cancelar_qtd_item_solicitacao_troca")
             except pedido_ws.PedidoWebserviceError as e:
                 erro = f"Falha ao cancelar o item substituído - nada foi alterado. {e}"
 
@@ -639,10 +669,12 @@ def trocar_item(codemp, codfil, numsol, seqite):
                         codemp, codfil, item["numped"], produto["codpro"], qtd,
                         preco_incluir, produto["codtab"], session["usuario"],
                     )
+                    _mark("SOAP incluir_item_pedido")
                     seqite_novo = oracle_db.inserir_item_solicitacao(
                         codemp, codfil, numsol, item["numped"], seqipd_novo, produto["codpro"],
                         produto["descricao"], qtd, session["usuario"], veio_de_troca=True,
                     )
+                    _mark("oracle inserir_item_solicitacao")
                     if alerta_preco:
                         # Mensagem enxuta - usu_obsite tem limite de 99
                         # caracteres (VARCHAR2(99)).
@@ -1097,7 +1129,7 @@ def index():
 def api_itens_entrega(codemp, codfil, numsol):
     """Retorna JSON com itens disponíveis para entrega."""
 
-    return jsonify({"itens": oracle_db.get_itens_entrega(codemp, codfil, numsol)})
+    return jsonify({"itens": oracle_db.listar_itens_para_entrega(codemp, codfil, numsol)})
 
 
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/entrega", methods=["GET", "POST"])

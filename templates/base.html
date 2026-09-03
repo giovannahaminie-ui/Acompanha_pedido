@@ -105,5 +105,32 @@
     })();
   </script>
   {% endif %}
+
+  <script>
+    // Botão "colar código" - preenche o campo alvo (data-target) com o
+    // último código copiado pelos botões do app (guardado em sessionStorage).
+    // Em HTTPS tenta ler a área de transferência de verdade primeiro.
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('.btn-colar-codigo');
+      if (!btn) return;
+      var campo = document.getElementById(btn.dataset.target);
+      if (!campo) return;
+
+      function preencher(txt) {
+        if (!txt) return;
+        campo.value = String(txt).trim().toUpperCase();
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+        campo.focus();
+      }
+      var guardado = null;
+      try { guardado = sessionStorage.getItem('ultimoCodigoCopiado'); } catch (err) {}
+
+      if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
+        navigator.clipboard.readText().then(preencher).catch(function () { preencher(guardado); });
+      } else {
+        preencher(guardado);
+      }
+    });
+  </script>
 </body>
 </html>

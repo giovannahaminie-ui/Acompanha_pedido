@@ -156,6 +156,7 @@
       botao.addEventListener('click', function () {
         const texto = botao.dataset.copiar;
         const iconeOriginal = botao.innerHTML;
+        try { sessionStorage.setItem('ultimoCodigoCopiado', texto); } catch (e) {}
         function marcarCopiado() {
           botao.textContent = '✓';
           setTimeout(function () { botao.innerHTML = iconeOriginal; }, 1200);
@@ -333,7 +334,12 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
       </div>
       <div class="field" style="width: 16rem; flex:none;">
         <label for="codpro_inserir">Código do produto novo</label>
-        <input type="text" id="codpro_inserir" name="codpro_novo" value="{{ avisar_alteracao.codpro if avisar_alteracao else '' }}" required style="text-transform: uppercase; width: 100%;" oninput="this.value = this.value.toUpperCase()">
+        <div style="display:flex; gap:4px;">
+          <input type="text" id="codpro_inserir" name="codpro_novo" value="{{ avisar_alteracao.codpro if avisar_alteracao else '' }}" required style="text-transform: uppercase; flex:1; min-width:0;" oninput="this.value = this.value.toUpperCase()">
+          <button type="button" class="btn btn-icone btn-colar-codigo" data-target="codpro_inserir" title="Colar código copiado" style="flex:none; padding:0 0.5rem;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>
+          </button>
+        </div>
         </div>
       </div>
       <button type="submit" class="btn btn-small">+ Inserir item</button>
@@ -543,13 +549,18 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
   <div id="painel-conferencia-conteudo" class="painel-conteudo">
 
 {% if pendentes_conferencia %}
+<form id="form-remover-conf" method="POST"
+      action="{{ url_for('conferencia_remover_varios', codemp=codemp, codfil=codfil, numsol=numsol) }}"></form>
 <div class="lista-pendentes">
   {% for p in pendentes_conferencia %}
   <div class="pend-item">
-    <div class="pend-item-info">
-      <div class="pend-item-titulo">{{ p.codbar }}</div>
-      <div class="pend-item-detalhe">Qtd: {{ p.qtd }}</div>
-    </div>
+    <label style="display:flex; align-items:center; gap:0.6rem; flex:1; cursor:pointer;">
+      <input type="checkbox" name="ids" value="{{ p.id }}" form="form-remover-conf">
+      <div class="pend-item-info">
+        <div class="pend-item-titulo">{{ p.codbar }}</div>
+        <div class="pend-item-detalhe">Qtd: {{ p.qtd }}</div>
+      </div>
+    </label>
     <form method="POST" action="{{ url_for('conferencia_remover', codemp=codemp, codfil=codfil, numsol=numsol, id_pendente=p.id) }}">
       <button type="submit" class="btn-remover-pend" title="Remover" aria-label="Remover">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
@@ -558,6 +569,9 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
   </div>
   {% endfor %}
 </div>
+<button type="submit" form="form-remover-conf" class="btn btn-small" style="margin-top:0.5rem;">
+  Remover selecionados
+</button>
 {% endif %}
 
 <form method="POST" action="{{ url_for('conferencia_adicionar', codemp=codemp, codfil=codfil, numsol=numsol) }}" id="form-conferencia">
@@ -568,7 +582,12 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
     </div>
     <div class="field" style="width: 16rem; flex:none;">
       <label for="codbar">Código de barras ou produto</label>
-      <input type="text" id="codbar" name="codbar" required style="text-transform: uppercase; width:100%;" oninput="this.value = this.value.toUpperCase()">
+      <div style="display:flex; gap:4px;">
+        <input type="text" id="codbar" name="codbar" required style="text-transform: uppercase; flex:1; min-width:0;" oninput="this.value = this.value.toUpperCase()">
+        <button type="button" class="btn btn-icone btn-colar-codigo" data-target="codbar" title="Colar código copiado" style="flex:none; padding:0 0.5rem;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>
+        </button>
+      </div>
     </div>
   </div>
   <button type="submit" class="btn btn-small">+ Adicionar</button>
@@ -592,8 +611,26 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
         <tbody>
           {% for item in itens_conferencia %}
           <tr>
-            <td class="mono">{{ item.codpro1 }}</td>
-            <td class="mono">{{ item.codpro2 }}</td>
+            <td class="mono">
+              <span style="display:inline-flex; align-items:center; gap:4px;">
+                {{ item.codpro1 }}
+                {% if item.codpro1 %}
+                <button type="button" class="btn-copiar-codfab" data-copiar="{{ item.codpro1 }}" title="Copiar código">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+                {% endif %}
+              </span>
+            </td>
+            <td class="mono">
+              <span style="display:inline-flex; align-items:center; gap:4px;">
+                {{ item.codpro2 }}
+                {% if item.codpro2 %}
+                <button type="button" class="btn-copiar-codfab" data-copiar="{{ item.codpro2 }}" title="Copiar código">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+                {% endif %}
+              </span>
+            </td>
             <td style="white-space:normal;">{{ item.descricao_item or '—' }}</td>
             <td class="mono">{{ item.endereco or '—' }}</td>
             <td>{{ item.qtd_solic }}</td>

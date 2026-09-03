@@ -21,7 +21,7 @@ def _varredura_periodica(intervalo_seg=300):
         except Exception as e:
             print(f"[varredura] erro: {e}")
 
-threading.Thread(target=_varredura_periodica, daemon=True).start()
+# threading.Thread(target=_varredura_periodica, daemon=True).start()
 
 if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")

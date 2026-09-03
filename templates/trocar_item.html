@@ -97,7 +97,12 @@
             </div>
             <div class="field">
               <label for="codpro_novo">Código do produto novo</label>
-              <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()">
+              <div style="display:flex; gap:4px;">
+                <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required style="text-transform: uppercase; flex:1; min-width:0;" oninput="this.value = this.value.toUpperCase()">
+                <button type="button" class="btn btn-icone btn-colar-codigo" data-target="codpro_novo" title="Colar código copiado" style="flex:none; padding:0 0.5rem;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>
+                </button>
+              </div>
             </div>
           </div>
             <div style="display:flex; gap:0.75rem;">
