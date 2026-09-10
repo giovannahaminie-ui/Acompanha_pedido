@@ -13,7 +13,7 @@
       {% endif %}
 
       {% if itens %}
-        <form method="POST">
+        <form method="POST" id="form-entrega">
           <table style="width:100%; border-collapse:collapse;">
             <thead>
               <tr style="border-bottom:2px solid var(--st-separacao);">
@@ -26,7 +26,8 @@
             <tbody>
               {% for item in itens %}
               <tr style="border-bottom:1px solid var(--st-separacao);">
-                <td style="text-align:center; padding:0.5rem;"><input type="checkbox" name="seqites" value="{{ item.seqite }}" class="item-check"></td>
+                <td style="text-align:center; padding:0.5rem;"><input type="checkbox" name="seqites" value="{{ item.seqite }}" class="item-check"
+                    data-codigo="{{ item.codpro2 }}" data-descricao="{{ item.descricao }}" data-qtd="{{ item.qtd_atendida - item.qtd_movimentada }}"></td>
                 <td style="padding:0.5rem;">{{ item.codpro2 }}</td>
                 <td style="padding:0.5rem;">{{ item.descricao }}</td>
                 <td style="text-align:right; padding:0.5rem;"><strong>{{ item.qtd_atendida - item.qtd_movimentada }}</strong></td>
@@ -37,7 +38,7 @@
 
           <div style="display:flex; gap:0.75rem; margin-top:1rem;">
             <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">Cancelar</a>
-            <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">Confirmar Entrega</button>
+            <button type="button" class="btn-primary" style="flex:1; justify-content:center;" onclick="abrirConfirmacaoEntrega()">Confirmar Entrega</button>
           </div>
         </form>
       {% else %}
@@ -47,4 +48,62 @@
     </div>
   </div>
 </div>
+
+{% if itens %}
+<!-- Pop-up de confirmação dos itens de entrega -->
+<div class="obs-modal-overlay" id="modal-confirma-entrega">
+  <div class="obs-modal" style="max-width:560px;">
+    <button type="button" class="obs-modal-close" onclick="fecharConfirmacaoEntrega()" title="Fechar" aria-label="Fechar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+    <p class="obs-modal-title">Confirmar entrega dos itens abaixo?</p>
+    <div class="obs-modal-body" style="white-space:normal;">
+      <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--st-separacao);">
+            <th style="text-align:left; padding:0.4rem;">Código</th>
+            <th style="text-align:left; padding:0.4rem;">Descrição</th>
+            <th style="text-align:right; padding:0.4rem;">Qtd.</th>
+          </tr>
+        </thead>
+        <tbody id="modal-confirma-lista"></tbody>
+      </table>
+    </div>
+    <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
+      <button type="button" class="btn" style="flex:1; justify-content:center;" onclick="fecharConfirmacaoEntrega()">Voltar</button>
+      <button type="button" class="btn-primary" style="flex:1; justify-content:center;" onclick="document.getElementById('form-entrega').submit()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function abrirConfirmacaoEntrega() {
+    const marcados = Array.from(document.querySelectorAll('.item-check:checked'));
+    if (marcados.length === 0) {
+      alert('Selecione pelo menos um item para entregar.');
+      return;
+    }
+    const corpo = document.getElementById('modal-confirma-lista');
+    corpo.innerHTML = '';
+    marcados.forEach(chk => {
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--st-separacao)';
+      tr.innerHTML =
+        '<td style="padding:0.4rem;">' + chk.dataset.codigo + '</td>' +
+        '<td style="padding:0.4rem;">' + chk.dataset.descricao + '</td>' +
+        '<td style="padding:0.4rem; text-align:right;"><strong>' + chk.dataset.qtd + '</strong></td>';
+      corpo.appendChild(tr);
+    });
+    document.getElementById('modal-confirma-entrega').classList.add('open');
+  }
+
+  function fecharConfirmacaoEntrega() {
+    document.getElementById('modal-confirma-entrega').classList.remove('open');
+  }
+
+  document.getElementById('modal-confirma-entrega').addEventListener('click', function (e) {
+    if (e.target === this) fecharConfirmacaoEntrega();
+  });
+</script>
+{% endif %}
 {% endblock %}

@@ -199,7 +199,7 @@
             <tbody>
               {% for item in atendidos %}
               <tr class="linha-atendida" data-codemp="{{ item.codemp }}" data-codfil="{{ item.codfil }}" data-numsol="{{ item.numsol }}"
-                  {% if not somente_visualizacao %}ondblclick="window.location.href='{{ url_for('entrega_item', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol )}}'" style="cursor: pointer;" title="Duplo clique para retirar itens"{% endif%}>
+                {% if not somente_visualizacao %}onclick="window.location.href='{{ url_for('entrega_item', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol )}}'" style="cursor: pointer;" title="Clique para retirar itens"{% endif%}>
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
                 <td><span class="mono">{{ item.numped }}</span></td>

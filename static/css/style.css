@@ -553,6 +553,8 @@ table tbody tr { transition: all 0.2s ease; }
   background-color: var(--bg-soft-2);
 }
 table tbody tr:hover td { background-color: var(--bg-soft); }
+.painel-col table tbody tr.linha-atendida:hover td { background-color: transparent; }
+.painel-col table tbody tr:hover td{ background-color: transparent;}
 table tbody tr.linha-sitite-ok td,
 table tbody tr.linha-sitite-ok td.item-acoes { background-color: var(--emerald-soft); border-top-color: var(--emerald-soft); }
 table tbody tr.linha-sitite-ok:hover td,
