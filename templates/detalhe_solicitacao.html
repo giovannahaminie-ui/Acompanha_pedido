@@ -312,6 +312,7 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
           <div class="pend-item-titulo">{{ p.codpro }} — {{ p.descricao }}</div>
           <div class="pend-item-detalhe">
             Qtd: {{ p.qtd }} · Preço unit.: {{ '%.2f'|format(p.preco) }}
+            {% if p.codfab %}· Cód. Fab.: {{ p.codfab }}{% endif %}
             {% if p.is_alteracao %}· <strong>alteração (soma à qtd. já existente)</strong>{% endif %}
           </div>
         </div>

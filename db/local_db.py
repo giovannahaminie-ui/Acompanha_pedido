@@ -65,6 +65,7 @@ def init_db():
             numsol INTEGER NOT NULL,
             codpro TEXT NOT NULL,
             descricao TEXT,
+            codfab TEXT,
             qtd REAL NOT NULL,
             preco REAL NOT NULL,
             codtab TEXT,
@@ -81,6 +82,8 @@ def init_db():
         conn.execute("ALTER TABLE itens_inserir_pendentes ADD COLUMN seqite_existente INTEGER")
     if "seqipd_existente" not in colunas_pendentes:
         conn.execute("ALTER TABLE itens_inserir_pendentes ADD COLUMN seqipd_existente INTEGER")
+    if "codfab" not in colunas_pendentes:
+        conn.execute("ALTER TABLE itens_inserir_pendentes ADD COLUMN codfab TEXT")
 
     # De-para crachá -> código de usuário do Sapiens. O código de barras do
     # crachá é aleatório (não tem relação com o codusu), então a única forma
@@ -281,15 +284,15 @@ def listar_itens_pendentes(codemp, codfil, numsol):
     return [dict(l) for l in linhas]
 
 def adicionar_item_pendente(codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario,
-                             is_alteracao=False, seqite_existente=None, seqipd_existente=None):
+                             is_alteracao=False, seqite_existente=None, seqipd_existente=None,  codfab=None):
     conn = get_conn()
     conn.execute(
         """INSERT INTO itens_inserir_pendentes
            (codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario,
-            is_alteracao, seqite_existente, seqipd_existente)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            is_alteracao, seqite_existente, seqipd_existente, codfab)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (codemp, codfil, numsol, codpro, descricao, qtd, preco, codtab, usuario,
-         1 if is_alteracao else 0, seqite_existente, seqipd_existente),
+         1 if is_alteracao else 0, seqite_existente, seqipd_existente, codfab),
     )
     conn.commit()
     conn.close()

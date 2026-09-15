@@ -374,16 +374,17 @@ def inserir_peca_adicionar(codemp, codfil, numsol):
                 }
             elif item_existente:
                 local_db.adicionar_item_pendente(
-                    codemp, codfil, numsol, produto["codpro"], produto["descricao"],
-                    qtd, produto["preco"], produto["codtab"], session["usuario"],
-                    is_alteracao=True, seqite_existente=item_existente["seqite"],
-                    seqipd_existente=item_existente["seqipd"],
-                )
+        codemp, codfil, numsol, produto["codpro"], produto["descricao"],
+        qtd, produto["preco"], produto["codtab"], session["usuario"],
+        is_alteracao=True, seqite_existente=item_existente["seqite"],
+        seqipd_existente=item_existente["seqipd"], codfab=produto["codfab"],
+    )
             else:
                 local_db.adicionar_item_pendente(
-                    codemp, codfil, numsol, produto["codpro"], produto["descricao"],
-                    qtd, produto["preco"], produto["codtab"], session["usuario"],
-                )
+        codemp, codfil, numsol, produto["codpro"], produto["descricao"],
+        qtd, produto["preco"], produto["codtab"], session["usuario"],
+        codfab=produto["codfab"],
+    )
 
     if erro or avisar_alteracao:
         return _render_detalhe(codemp, codfil, numsol, erro_inserir=erro, avisar_alteracao=avisar_alteracao, painel_aberto=True)

@@ -747,7 +747,7 @@ def salvar_observacao_item(codemp, codfil, numsol, seqite, texto_novo):
 CODTPR_PADRAO = "001"
 
 SQL_PRODUTO_ATIVO_PRECO = """
-                SELECT t.codpro,t.prebas,e.coddep,a.qtdabe,a.qtdped, p.codmar, p.despro, a.seqipd 
+                SELECT t.codpro,t.prebas,e.coddep,a.qtdabe,a.qtdped, p.codmar, p.despro, a.seqipd, p.usu_codpro2 
                 FROM sapiens.e075pro p
                 LEFT JOIN sapiens.e081itp t ON t.codemp=p.codemp 
                     AND t.codtpr='001' 
@@ -785,13 +785,14 @@ def buscar_produto_preco(codemp, codfil, numped, codpro):
     conn.close()
     if not prod_row:
         return None
-    codpro_enc, prebas, _coddep, _qtdabe, _qtdped, codmar, despro, _seqipd = prod_row
+    codpro_enc, prebas, _coddep, _qtdabe, _qtdped, codmar, despro, _seqipd, codfab = prod_row
 
     preco = float(prebas) if prebas is not None else None
     return {
-        "codpro": codpro_enc, "descricao": despro, "marca": (codmar or "").strip() or None,
-        "ativo": True, "codtab": CODTPR_PADRAO, "preco": preco,
-    }
+    "codpro": codpro_enc, "descricao": despro, "marca": (codmar or "").strip() or None,
+    "ativo": True, "codtab": CODTPR_PADRAO, "preco": preco,
+    "codfab": (codfab or "").strip() or None,
+}
 
 SQL_FILIAL_PEDIDO = "SELECT usu_filexe FROM sapiens.e120ped " \
     "                   WHERE codemp=:codemp " \

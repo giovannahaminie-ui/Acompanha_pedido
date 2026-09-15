@@ -61,6 +61,28 @@ def _fmt_numero(valor):
 
 _ws_clients = {}
 
+def _corrigir_endereco_servico(client, wsdl):
+    """O WSDL do Sapiens anuncia o serviço com o IP público do servidor
+    Senior (ex: 187.62.8.136), que não é alcançável a partir desta rede -
+    só o host usado pra buscar o próprio WSDL (ex: 192.168.10.235) é. O
+    zeep usa o endereço anunciado (não a URL do WSDL) nas chamadas reais,
+    e ele já fica "travado" no service proxy default logo na criação do
+    Client, então a correção é recriar o proxy via create_service() com o
+    host:porta da URL do WSDL, mantendo o resto do endereço anunciado.
+
+    client.service é uma property sem setter (só leitura) - o valor de
+    verdade fica em client._default_service (é o que a property devolve,
+    calculando/cacheando nele na primeira leitura), então a substituição
+    tem que ser nesse atributo, não na property."""
+    from urllib.parse import urlparse, urlunparse
+
+    servico = next(iter(client.wsdl.services.values()))
+    porta = next(iter(servico.ports.values()))
+    endereco_anunciado = urlparse(porta.binding_options["address"])
+    host_wsdl = urlparse(wsdl)
+    endereco_corrigido = urlunparse(endereco_anunciado._replace(scheme=host_wsdl.scheme, netloc=host_wsdl.netloc))
+    client._default_service = client.create_service(porta.binding.name, endereco_corrigido)
+
 def _client_para(wsdl):
     cached = _ws_clients.get(wsdl)
     if cached is None:
@@ -68,6 +90,7 @@ def _client_para(wsdl):
         from zeep.plugins import HistoryPlugin
         history = HistoryPlugin()
         client = zeep.Client(wsdl, plugins=[history])
+        _corrigir_endereco_servico(client, wsdl)
         _ws_clients[wsdl]= cached = (client, history)
     return cached
 
