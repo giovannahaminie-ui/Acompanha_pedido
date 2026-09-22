@@ -33,6 +33,22 @@
     <!-- FILTROS (tipo de serviço / etapa) -->
     <form method="GET" id="form-filtros-painel" class="painel-filtros">
       <div class="painel-filtro-campo">
+      <label>Filial</label>
+      <input type="hidden" name="filial" id="filial" value="{{ filial_selecionada or '' }}">
+      <div class="ux-select-wrapper ux-select-compact">
+        <div class="ux-select-trigger">
+          <span class="ux-selected-text">{{ filial_nome or 'Todas as filiais' }}</span>
+          <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        <div class="ux-options-menu">
+          <div class="ux-option-item {{ 'selected' if not filial_selecionada else '' }}" data-value="">Todas as filiais</div>
+          {% for cod, nome in filiais %}
+            <div class="ux-option-item {{ 'selected' if filial_selecionada == cod else '' }}" data-value="{{ cod }}">{{ cod }} — {{ nome }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+      <div class="painel-filtro-campo">
         <label>Tipo de serviço</label>
         <input type="hidden" name="tipo_servico" id="tipo_servico" value="{{ tipo_servico_selecionado or '' }}">
         <div class="ux-select-wrapper ux-select-compact">

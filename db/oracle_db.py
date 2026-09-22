@@ -1374,6 +1374,26 @@ def atualizar_itens_solicitacao_com_oc(codemp, codfil, numsol, seqites):
     conn.close()
 
 # ---------------------------------------------------------------------
+# UPDATE -  DESBLOQUEIO E120PED
+# ---------------------------------------------------------------------
+
+SQL_DESBLOQUEAR_PEDIDO = """
+                UPDATE sapiens.E120PED
+                SET pedblo = 'N'
+                WHERE codemp = :codemp
+                AND codfil = :codfil
+                AND numped = :numped
+            """
+
+def desbloquear_pedido(codemp, codfil,  numped):
+    "Desbloqueia o pedido para que o relatório consiga ser gerado."
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_DESBLOQUEAR_PEDIDO, codemp=codemp, codfil=codfil, numped=numped)
+    conn.commit()
+    conn.close()
+
+# ---------------------------------------------------------------------
 # Transferencia de poduto - UPDATEs após sucesso
 # ---------------------------------------------------------------------
 
@@ -1820,3 +1840,22 @@ def varrer_situacao_solicitacoes(dias=180):
     conn.commit()
     conn.close()
     return n_atend, n_final
+
+# ---------------------------------------------------------------------
+# SELECT para fixar filial do usuário.
+# ---------------------------------------------------------------------
+
+SQL_FILIAL_USUARIO = """
+                    SELECT usu_filusu
+                    FROM sapiens.E099USU
+                    WHERE situsu = 'A'
+                    AND codusu = :codusu
+                    AND ROWNUM = 1
+"""
+def get_filial_usuario(codusu):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_FILIAL_USUARIO, codusu=int(codusu))
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row and row [0] else None

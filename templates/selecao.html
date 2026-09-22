@@ -8,7 +8,7 @@
       <span class="eyebrow">Filtros</span>
       <h1>Seja bem vindo(a) {{ nome_usuario_logado }}!</h1>
       <p class="lead">
-        Filtre por empresa e filial. Você pode trocar essa seleção
+        Selecione a empresa que gostaria de visualizar. Você pode trocar essa seleção
         quando quiser sem precisar logar de novo.
       </p>
       <div class="hero-points">
@@ -29,7 +29,7 @@
       <p class="card-subtitle">Selecione os parâmetros desejados para acessar o painel de solicitações.</p>
 
       <form method="POST">
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 1.25rem;">
+        <div style="display:grid; grid-template-columns:1fr; gap:0 1.25rem;">
 
           <!-- Empresa -->
           <div class="field">
@@ -49,25 +49,6 @@
               </div>
             </div>
           </div>
-
-          <!-- Filial -->
-          <div class="field">
-            <label>Filial</label>
-            <input type="hidden" name="filial" id="filial" value="">
-            <div class="ux-select-wrapper">
-              <div class="ux-select-trigger" tabindex="0">
-                <span class="ux-selected-text">Todas as filiais</span>
-                <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </div>
-              <div class="ux-options-menu">
-                <div class="ux-option-item selected" data-value="">Todas as filiais</div>
-                {% for cod, nome in filiais %}
-                  <div class="ux-option-item" data-value="{{ cod }}">{{ cod }} — {{ nome }}</div>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-
         </div>
 
         <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:0.5rem;">

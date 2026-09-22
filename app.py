@@ -9,7 +9,7 @@ import json
 import os
 import time
 
-from flask import Flask, render_template, request, redirect, url_for, session, current_app, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, current_app, jsonify, Response
 from dotenv import load_dotenv
 
 from db import local_db, oracle_db, pedido_ws
@@ -60,6 +60,7 @@ def injetar_perfil():
 # ---------------------------------------------------------------------
 # Autenticação / Tela de Login por CodUsuario (usuário do Sapiens)
 # ---------------------------------------------------------------------
+CODIGOS_LOGIN_DIRETO = {"675", "108", "131"}
 def resolver_identificador(valor: str) -> str:
     """Recebe o que veio do campo de login / leitor de crachá e devolve o
     código de usuário do Sapiens a ser validado.
@@ -69,8 +70,10 @@ def resolver_identificador(valor: str) -> str:
     não estiver lá, devolvemos ele mesmo — assim o login digitado com o código
     do Sapiens continua funcionando como sempre."""
     valor = (valor or "").strip()
-    return local_db.get_codusu_por_cracha(valor) or valor
-
+    codusu_cracha = local_db.get_codusu_por_cracha(valor)
+    if codusu_cracha:
+        return codusu_cracha
+    return valor if valor in CODIGOS_LOGIN_DIRETO else ""
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -98,14 +101,13 @@ def logout():
 def selecao():
     if request.method == "POST":
         session["filtro"] = {
-            "empresa": request.form.get("empresa"),
-            "filial": request.form.get("filial") or None,
-        }
+        "empresa": request.form.get("empresa"),
+        "filial": oracle_db.get_filial_usuario(session["usuario"]),
+    }
         return redirect(url_for("painel"))
     return render_template(
         "selecao.html",
-        empresas=EMPRESAS, filiais=FILIAIS,
-    )
+        empresas=EMPRESAS)
 
 # ---------------------------------------------------------------------
 # Painel principal - tipo de serviço e etapa são usados como filtros opcionais
@@ -122,13 +124,14 @@ def _contexto_painel():
     etapa = request.args.get("etapa") or None
     numped = request.args.get("numped") or None
     numsol = request.args.get("numsol") or None
+    filial = request.args.get("filial", filtro.get("filial")) or None
     dados = oracle_db.get_solicitacoes(
-        empresa=filtro.get("empresa"), filial=filtro.get("filial"),
+        empresa=filtro.get("empresa"), filial=filial,
         tipo_servico=tipo_servico, etapa=etapa, numped=numped, numsol=numsol,
     )
 
     nome_empresa = dict(EMPRESAS).get(int(filtro["empresa"]), "")
-    nome_filial = dict(FILIAIS).get(filtro["filial"]) if filtro.get("filial") else "todas as filiais"
+    nome_filial = dict(FILIAIS).get(filial) if filial else "todas as filiais"
     contexto = f"Empresa {filtro['empresa']} — {nome_empresa}, {nome_filial}"
 
     tipos_servico = oracle_db.get_tipos_servico()
@@ -167,6 +170,7 @@ def _contexto_painel():
         numped_selecionado=numped, numsol_selecionado=numsol,
         data_hoje=datetime.now().strftime("%d/%m/%Y"),
         hora_agora=datetime.now().strftime("%H:%M"),
+        filiais=FILIAIS, filial_selecionada=filial, filial_nome=nome_filial,
     )
 
 def _renderizar_block(template_nome, block_nome, **contexto):
@@ -623,6 +627,20 @@ def trocar_item(codemp, codfil, numsol, seqite):
                     erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
                 elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], produto["codpro"]):
                     erro = f"Produto {codpro_novo} não possui ligação para o depósito - processo não pode continuar."
+                else:
+                    # Produto novo já existe como outra linha ativa na
+                    # solicitação/pedido - bloqueia aqui (mesma checagem do
+                    # "Inserir peça") pra nem chegar a cancelar o item
+                    # substituído; o Sapiens recusaria com a Regra 113 de
+                    # qualquer jeito, só que depois do cancelamento já feito.
+                    item_existente = oracle_db.get_item_solicitacao_por_codpro(
+                        codemp, codfil, numsol, produto["codpro"],
+                    )
+                    if item_existente and item_existente["seqite"] != seqite:
+                        erro = (
+                            f"Produto {codpro_novo} já está no pedido (item {item_existente['seqite']}) - "
+                            "use \"Inserir peça\" pra ajustar a quantidade."
+                        )
                 _mark("produto_tem_ligacao_deposito")
 
         # Produto passou por todas as checagens - mostra a etapa de
@@ -656,16 +674,11 @@ def trocar_item(codemp, codfil, numsol, seqite):
             if not erro:
                 try:
                     preco_substituido = item_pedido["preco_unitario"] if item_pedido else None
-                    # Se o preço do item substituído era maior que o do produto
-                    # novo, manda esse preço (do substituído) pro webservice;
-                    # senão manda sem preço (deixa o Sapiens aplicar o da
-                    # tabela dele), evitando cair na checagem de tolerância de
-                    # preço do próprio Sapiens.
                     preco_incluir = (
                         preco_substituido
                         if preco_substituido is not None and preco_substituido > produto["preco"]
                         else None
-                    ) 
+                    )
                     seqipd_novo = pedido_ws.incluir_item_pedido(
                         codemp, codfil, item["numped"], produto["codpro"], qtd,
                         preco_incluir, produto["codtab"], session["usuario"],
@@ -677,8 +690,6 @@ def trocar_item(codemp, codfil, numsol, seqite):
                     )
                     _mark("oracle inserir_item_solicitacao")
                     if alerta_preco:
-                        # Mensagem enxuta - usu_obsite tem limite de 99
-                        # caracteres (VARCHAR2(99)).
                         msg_troca = f"{session['usuario']}: aut. {autorizado_por} (R$ {diferenca_preco:.2f})"
                         oracle_db.salvar_observacao_item(
                             codemp, codfil, numsol, seqite_novo, msg_troca,
@@ -736,6 +747,7 @@ def pedido_loja_lote(codemp, codfil, numsol):
     if request.form.get("confirmar"):
         resultados = [None] * len(itens_marcados)
         itens_validos = []
+        dados_relatorio_pedido = None
 
         for indice, item in enumerate(itens_marcados):
             if not item["saldos"]:
@@ -776,7 +788,9 @@ def pedido_loja_lote(codemp, codfil, numsol):
                     [{"codpro": item["codpro2"], "qtd": qtd, "preco": preco} for _, item, qtd, preco, _ in itens_validos],
                     tns_pro="90100", usuario=session["usuario"],
                 )
-
+                dados_relatorio_pedido = {
+                    "codemp": dados_loja["codemp_loja"], "codfil": dados_loja["codfil_loja"], "numped": numped,
+                }
                 seqites_validos = [item["seqite"] for _, item, _, _, _ in itens_validos]
                 for (indice, item, qtd, _preco, _dl), resultado_ws in zip(itens_validos, resultados_ws):
                     if resultado_ws["sucesso"]:
@@ -820,6 +834,7 @@ def pedido_loja_lote(codemp, codfil, numsol):
                             if sucesso_oc:
                                 oracle_db.atualizar_pedido_com_oc(dados_loja["codemp_loja"], dados_loja["codfil_loja"], numped, numocp)
                                 oracle_db.atualizar_itens_solicitacao_com_oc(codemp, codfil, numsol, seqites_validos)
+                                oracle_db.desbloquear_pedido(dados_loja["codemp_loja"], dados_loja["codfil_loja"], numped)
                                 local_db.registrar_acao(
                                     tipo_acao="oc_gerada",
                                     usuario=session["usuario"],
@@ -838,7 +853,7 @@ def pedido_loja_lote(codemp, codfil, numsol):
 
         return render_template(
             "pedido_loja_lote.html", codemp=codemp, codfil=codfil, numsol=numsol,
-            itens=itens_marcados, resultados=resultados,
+            itens=itens_marcados, resultados=resultados, dados_relatorio_pedido=dados_relatorio_pedido,
         )
 
     itens_com_sugestao = []
@@ -1263,6 +1278,19 @@ def entrega_item(codemp, codfil, numsol):
         "entrega_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
         itens=itens_entrega, detalhe=detalhe
     )
+
+@app.route("/pedido/<int:codemp>/<int:codfil>/<int:numped>/relatorio")
+@login_obrigatorio
+def relatorio_pedido_rvpe129(codemp, codfil, numped):
+    try:
+        pdf_bytes = pedido_ws.gerar_relatorio_pedido(codemp, codfil, numped)
+    except pedido_ws.PedidoWebserviceError as e:
+        return f"Falha ao gerar relatório RVPE129: {e}", 500
+    return Response(
+        pdf_bytes, mimetype="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="pedido_{numped}.pdf"'},
+    )
+
 
 if __name__ == "__main__":
     serve(app, host="0.0.0.0", port=5051)

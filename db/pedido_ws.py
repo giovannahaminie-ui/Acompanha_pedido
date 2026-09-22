@@ -552,3 +552,44 @@ def transferencia_produtos(itens, codemp, codfil, numped, usuario, filexe):
         _log_envelopes(history, "transferencia_produtos")
 
 
+# ---------------------------------------------------------------------
+# Relatório (com_senior_g5_co_ger_relatorio) - Relatório (RVPE129)
+# ---------------------------------------------------------------------
+RELATORIO_WS_WSDL = os.environ.get("RELATORIO_WS_WSDL", "")
+RELATORIO_WS_USER = os.environ.get("RELATORIO_WS_USER", "")
+RELATORIO_WS_PASSWORD = os.environ.get("RELATORIO_WS_PASSWORD", "")
+
+def _get_client_relatorio():
+    if not (RELATORIO_WS_WSDL and RELATORIO_WS_USER and RELATORIO_WS_PASSWORD):
+        raise PedidoWebserviceError(
+            "Webservice de relatório não configurado - faltam RELATORIO_WS_WSDL/" \
+            "RELATORIO_WS_USER/RELATORIO_WS_PASSWORD no .env."
+        )
+    return _client_para(RELATORIO_WS_WSDL)
+
+def gerar_relatorio_pedido(codemp, codfil, numped):
+    "Gera o relatório RVPE129 em pdf."
+
+    client, history = _get_client_relatorio()
+    entrada = f"<ECodEmp={codemp}><ECodfil={codfil}><ENumped={numped}>"
+    try:
+        resposta = client.service.Executar(
+            user=RELATORIO_WS_USER,
+            password=RELATORIO_WS_PASSWORD,
+            encryption=0,
+            parameters={
+                "prRelatorio": "RVPE129.GER",
+                "prEntrada": entrada,
+                "prExecFmt": "tefFile",
+                "prSaveFormat": "tsfPDF",
+                "prEntranceIsXML": "F",
+            }
+        )
+    finally:
+        _log_envelopes(history, "gerar_relatorio_pedido")
+
+    if (getattr(resposta, "erroExecucao", None) or "").strip():
+        raise PedidoWebserviceError(resposta.erroExecucao)
+
+    import base64
+    return base64.b64decode(resposta.prRetorno)
