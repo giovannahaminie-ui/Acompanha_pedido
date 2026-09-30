@@ -1,77 +1,92 @@
 {% extends "base.html" %}
 {% block title %}Entrega de itens{% endblock %}
 {% block content %}
-<div class="hero-screen">
-  <div class="hero-inner" style="grid-template-columns: 1fr;">
-    <div class="auth-card" style="max-width:720px;">
-      <div class="card-brand">RT</div>
-      <p class="card-title">Entrega de itens</p>
-      <p class="card-subtitle">Solicitação {{ numsol }} — O.S. {{ detalhe.solicitacao.numped }}</p>
+<div class="login-screen login-centro">
 
-      {% if erro %}
-        <div class="alert">{{ erro }}</div>
-      {% endif %}
+  <div class="login-stage"></div>
 
-      {% if itens %}
-        <form method="POST" id="form-entrega">
-          <table style="width:100%; border-collapse:collapse;">
-            <thead>
-              <tr style="border-bottom:2px solid var(--st-separacao);">
-                                <th style="padding:0.5rem;"></th>
-                <th style="text-align:left; padding:0.5rem;">Código</th>
-                <th style="text-align:left; padding:0.5rem;">Descrição</th>
-                <th style="text-align:right; padding:0.5rem;">A Entregar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in itens %}
-              <tr style="border-bottom:1px solid var(--st-separacao);">
-                <td style="text-align:center; padding:0.5rem;"><input type="checkbox" name="seqites" value="{{ item.seqite }}" class="item-check"
-                    data-codigo="{{ item.codpro2 }}" data-descricao="{{ item.descricao }}" data-qtd="{{ item.qtd_atendida - item.qtd_movimentada }}"></td>
-                <td style="padding:0.5rem;">{{ item.codpro2 }}</td>
-                <td style="padding:0.5rem;">{{ item.descricao }}</td>
-                <td style="text-align:right; padding:0.5rem;"><strong>{{ item.qtd_atendida - item.qtd_movimentada }}</strong></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+  <aside class="login-sidebar" style="--card-w:780px;">
+    <div class="login-sidebar-inner">
 
-          <div style="display:flex; gap:0.75rem; margin-top:1rem;">
-            <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">Cancelar</a>
-            <button type="button" class="btn-primary" style="flex:1; justify-content:center;" onclick="abrirConfirmacaoEntrega()">Confirmar Entrega</button>
+      <div class="login-card-intro">
+        <img class="login-logo-mini" src="{{ url_for('static', filename='img/Tiete 2022 logo nova com qualidae.png') }}" alt="Grupo Tiête">
+        <p class="login-title">Entrega de itens</p>
+        <p class="login-subtitle">Solicitação {{ numsol }} — O.S. {{ detalhe.solicitacao.numped }}</p>
+      </div>
+
+      <div class="login-card-form">
+        {% if erro %}
+          <div class="login-alert">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+            {{ erro }}
           </div>
-        </form>
-      {% else %}
-        <div class="alert">Nenhum item disponível para entrega.</div>
-        <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn-primary" style="display:flex; justify-content:center;">Voltar</a>
-      {% endif %}
+        {% endif %}
+
+        {% if itens %}
+          <form method="POST" id="form-entrega">
+            <label class="entrega-marcar-todos">
+              <input type="checkbox" id="entrega-todos"> Marcar todos
+            </label>
+
+            <div class="entrega-lista">
+              {% for item in itens %}
+              <label class="entrega-linha">
+                <input type="checkbox" name="seqites" value="{{ item.seqite }}" class="item-check"
+                       data-codigo="{{ item.codpro2 }}" data-descricao="{{ item.descricao }}" data-qtd="{{ item.qtd_atendida - item.qtd_movimentada }}">
+                <span class="entrega-cod">{{ item.codpro2 }}</span>
+                <span class="entrega-desc">{{ item.descricao }}</span>
+                <span class="entrega-qtd">
+                  <span class="entrega-qtd-rotulo">A entregar</span>
+                  <strong>{{ item.qtd_atendida - item.qtd_movimentada }}</strong>
+                </span>
+              </label>
+              {% endfor %}
+            </div>
+
+            <div class="login-botoes">
+              <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="login-btn-sec">Cancelar</a>
+              <button type="button" class="login-btn" onclick="abrirConfirmacaoEntrega()">Confirmar entrega</button>
+            </div>
+          </form>
+        {% else %}
+          <div class="login-alert">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+            Nenhum item disponível para entrega.
+          </div>
+          <div class="login-botoes">
+            <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="login-btn-sec">Voltar</a>
+          </div>
+        {% endif %}
+      </div>
+
     </div>
-  </div>
+  </aside>
+
 </div>
 
 {% if itens %}
 <!-- Pop-up de confirmação dos itens de entrega -->
 <div class="obs-modal-overlay" id="modal-confirma-entrega">
-  <div class="obs-modal" style="max-width:560px;">
+  <div class="obs-modal entrega-modal">
     <button type="button" class="obs-modal-close" onclick="fecharConfirmacaoEntrega()" title="Fechar" aria-label="Fechar">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
     </button>
     <p class="obs-modal-title">Confirmar entrega dos itens abaixo?</p>
     <div class="obs-modal-body" style="white-space:normal;">
-      <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+      <table class="entrega-tabela">
         <thead>
-          <tr style="border-bottom:2px solid var(--st-separacao);">
-            <th style="text-align:left; padding:0.4rem;">Código</th>
-            <th style="text-align:left; padding:0.4rem;">Descrição</th>
-            <th style="text-align:right; padding:0.4rem;">Qtd.</th>
+          <tr>
+            <th>Código</th>
+            <th>Descrição</th>
+            <th style="text-align:right;">Qtd.</th>
           </tr>
         </thead>
         <tbody id="modal-confirma-lista"></tbody>
       </table>
     </div>
-    <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
-      <button type="button" class="btn" style="flex:1; justify-content:center;" onclick="fecharConfirmacaoEntrega()">Voltar</button>
-      <button type="button" class="btn-primary" style="flex:1; justify-content:center;" onclick="document.getElementById('form-entrega').submit()">Confirmar</button>
+    <div class="modal-botoes">
+      <button type="button" class="login-btn-sec" onclick="fecharConfirmacaoEntrega()">Voltar</button>
+      <button type="button" class="login-btn" style="flex:1; width:auto;" onclick="document.getElementById('form-entrega').submit()">Confirmar</button>
     </div>
   </div>
 </div>
@@ -85,13 +100,14 @@
     }
     const corpo = document.getElementById('modal-confirma-lista');
     corpo.innerHTML = '';
-    marcados.forEach(chk => {
+    marcados.forEach(function (chk) {
       const tr = document.createElement('tr');
-      tr.style.borderBottom = '1px solid var(--st-separacao)';
-      tr.innerHTML =
-        '<td style="padding:0.4rem;">' + chk.dataset.codigo + '</td>' +
-        '<td style="padding:0.4rem;">' + chk.dataset.descricao + '</td>' +
-        '<td style="padding:0.4rem; text-align:right;"><strong>' + chk.dataset.qtd + '</strong></td>';
+      [chk.dataset.codigo, chk.dataset.descricao, chk.dataset.qtd].forEach(function (texto, i) {
+        const td = document.createElement('td');
+        td.textContent = texto;
+        if (i === 2) td.className = 'col-qtd';
+        tr.appendChild(td);
+      });
       corpo.appendChild(tr);
     });
     document.getElementById('modal-confirma-entrega').classList.add('open');
@@ -104,6 +120,20 @@
   document.getElementById('modal-confirma-entrega').addEventListener('click', function (e) {
     if (e.target === this) fecharConfirmacaoEntrega();
   });
+
+  // "Marcar todos" acompanha as marcações individuais
+  (function () {
+    const todos = document.getElementById('entrega-todos');
+    const itens = Array.from(document.querySelectorAll('.item-check'));
+    todos.addEventListener('change', function () {
+      itens.forEach(function (c) { c.checked = todos.checked; });
+    });
+    itens.forEach(function (c) {
+      c.addEventListener('change', function () {
+        todos.checked = itens.every(function (i) { return i.checked; });
+      });
+    });
+  })();
 </script>
 {% endif %}
 {% endblock %}

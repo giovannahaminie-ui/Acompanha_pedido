@@ -1,91 +1,99 @@
 {% extends "base.html" %}
 {% block title %}Usuários e perfis{% endblock %}
 {% block content %}
+<div class="os-page">
 
-<div class="header-bar">
-  <div class="brand">
-    <div class="brand-mark">RT</div>
-    <div>
-      <h1>Usuários e perfis</h1>
-      <p class="subtitle">Acesso restrito à gerência · mostrando <span id="contagemVisivel">{{ usuarios|length }}</span> de {{ usuarios|length }} usuários ativos no Sapiens</p>
+  <header class="os-topo adm-topo">
+    <div class="os-topo-bloco os-topo-id">
+      <a class="os-voltar" href="{{ url_for('painel') }}">&larr; Painel</a>
+      <span class="os-rotulo">Acesso restrito à gerência</span>
+      <span class="adm-titulo">Usuários e perfis</span>
     </div>
+    <div class="os-topo-bloco">
+      <span class="os-rotulo">Mostrando</span>
+      <span class="os-valor"><span id="contagemVisivel">{{ usuarios|length }}</span> de {{ usuarios|length }}</span>
+    </div>
+    <div class="os-topo-bloco">
+      <span class="os-rotulo">Origem</span>
+      <span class="os-valor">Usuários ativos no Sapiens</span>
+    </div>
+  </header>
+
+  <div class="os-corpo">
+
+    <div class="adm-filtros">
+      <div class="adm-busca">
+        <label for="busca-usuario">Pesquisar</label>
+        <input type="search" id="busca-usuario" autocomplete="off"
+               placeholder="Nome, código do Sapiens ou código de barras">
+      </div>
+      <div class="filtro-perfil-row">
+        <label>Filtrar por nível</label>
+        <span class="filtro-chip active" data-filter="__all__">
+          Todos <span class="filtro-count">{{ usuarios|length }}</span>
+        </span>
+        <span class="filtro-chip" data-filter="G">
+          Gerência <span class="filtro-count">{{ usuarios|selectattr('perfil', 'eq', 'G')|list|length }}</span>
+        </span>
+        <span class="filtro-chip" data-filter="B">
+          Boqueta <span class="filtro-count">{{ usuarios|selectattr('perfil', 'eq', 'B')|list|length }}</span>
+        </span>
+        <span class="filtro-chip" data-filter="U">
+          Usinagem <span class="filtro-count">{{ usuarios|selectattr('perfil', 'eq', 'U')|list|length }}</span>
+        </span>
+        <span class="filtro-chip" data-filter="__none__">
+          Sem perfil <span class="filtro-count">{{ usuarios|rejectattr('perfil')|list|length }}</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <table class="tabela-usuarios">
+        <thead>
+          <tr>
+            <th style="width:30%;">Usuário (Sapiens)</th>
+            <th style="width:40%;">Código de barras do crachá</th>
+            <th style="width:30%;">Perfil</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in usuarios %}
+          <tr data-perfil="{{ u.perfil or '' }}"
+              data-busca="{{ (u.nome ~ ' ' ~ u.usuario ~ ' ' ~ (u.crachas | join(' '))) | lower }}">
+            <td>
+              <div class="user-cell">
+                <span class="avatar">{{ u.nome[:2]|upper }}</span>
+                <div>
+                  <div class="user-name {{ 'perfil-' + u.perfil if u.perfil else '' }}">{{ u.nome }}</div>
+                  <div class="user-code" style="margin-top:0.15rem;">código {{ u.usuario }}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              {% if u.crachas %}
+                {% for cod in u.crachas %}<code>{{ cod }}</code>{% if not loop.last %}<br>{% endif %}{% endfor %}
+              {% else %}
+                <span class="text-mute">— não cadastrado</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="perfil-tag perfil-tag-{{ u.perfil if u.perfil else 'none' }}">
+                {{ {'G': 'Gerência', 'B': 'Boqueta', 'U': 'Usinagem'}.get(u.perfil, 'Sem perfil') }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note">
+      Só visualização. O nível de acesso é definido junto com o crachá em
+      <a href="{{ url_for('admin_crachas') }}">Cadastrar crachá</a>.
+    </p>
+
   </div>
-  <a href="{{ url_for('painel') }}" class="btn-trocar">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-    Voltar ao painel
-  </a>
 </div>
-
-<div class="filtro-perfil-row" style="margin-bottom:0.9rem;">
-  <label for="busca-usuario">Pesquisar</label>
-  <input type="search" id="busca-usuario" autocomplete="off"
-         placeholder="Nome, código do Sapiens ou código de barras"
-         style="flex:1 1 320px; max-width:440px;">
-</div>
-
-<div class="filtro-perfil-row">
-  <label>Filtrar por nível</label>
-  <span class="filtro-chip active" data-filter="__all__">
-    Todos <span class="filtro-count">{{ usuarios|length }}</span>
-  </span>
-  <span class="filtro-chip" data-filter="G" style="color:var(--perfil-g);">
-    Gerência <span class="filtro-count">{{ usuarios|selectattr('perfil', 'eq', 'G')|list|length }}</span>
-  </span>
-  <span class="filtro-chip" data-filter="B" style="color:var(--perfil-b);">
-    Boqueta <span class="filtro-count">{{ usuarios|selectattr('perfil', 'eq', 'B')|list|length }}</span>
-  </span>
-  <span class="filtro-chip" data-filter="U" style="color:var(--perfil-u);">
-    Usinagem <span class="filtro-count">{{ usuarios|selectattr('perfil', 'eq', 'U')|list|length }}</span>
-  </span>
-  <span class="filtro-chip" data-filter="__none__" style="color:var(--perfil-none);">
-    Sem perfil <span class="filtro-count">{{ usuarios|rejectattr('perfil')|list|length }}</span>
-  </span>
-</div>
-
-<div class="table-card">
-  <table class="tabela-usuarios">
-    <thead>
-      <tr>
-        <th style="width:16%;">Usuário (Sapiens)</th>
-        <th style="width:32%;">Código de barras do crachá</th>
-        <th style="width:24%;">Perfil</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for u in usuarios %}
-      <tr data-perfil="{{ u.perfil or '' }}"
-          data-busca="{{ (u.nome ~ ' ' ~ u.usuario ~ ' ' ~ (u.crachas | join(' '))) | lower }}">
-        <td>
-          <div class="user-cell">
-            <span class="avatar">{{ u.nome[:2]|upper }}</span>
-            <div>
-              <div class="user-name {{ 'perfil-' + u.perfil if u.perfil else '' }}">{{ u.nome }}</div>
-              <div class="user-code" style="margin-top:0.15rem;">código {{ u.usuario }}</div>
-            </div>
-          </div>
-        </td>
-        <td>
-          {% if u.crachas %}
-            {% for cod in u.crachas %}<code>{{ cod }}</code>{% if not loop.last %}<br>{% endif %}{% endfor %}
-          {% else %}
-            <span class="text-mute">— não cadastrado</span>
-          {% endif %}
-        </td>
-        <td>
-          <span class="perfil-tag perfil-tag-{{ u.perfil if u.perfil else 'none' }}">
-            {{ {'G': 'Gerência', 'B': 'Boqueta', 'U': 'Usinagem'}.get(u.perfil, 'Sem perfil') }}
-          </span>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-<p class="note">
-  Só visualização. O nível de acesso é definido junto com o crachá em
-  <a href="{{ url_for('admin_crachas') }}">Cadastrar crachá</a>.
-</p>
 
 <script>
   // Filtros combinados: nível (chips) + pesquisa por texto - só mostra/esconde
@@ -128,5 +136,4 @@
     busca.addEventListener('input', aplicar);
   });
 </script>
-
 {% endblock %}

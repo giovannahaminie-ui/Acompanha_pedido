@@ -1,47 +1,47 @@
 {% extends "base.html" %}
 {% block title %}Assumir solicitação{% endblock %}
 {% block content %}
-<div class="hero-screen">
-  <div class="hero-inner">
+<div class="login-screen login-centro">
+  <div class="login-stage"></div>
+  <aside class="login-sidebar">
+    <div class="login-sidebar-inner">
 
-    <div class="hero-copy">
-      <span class="eyebrow">O.S. {{ numped }} · Solicitação {{ numsol }}</span>
-      <h1>Confirme seu código para assumir essa solicitação.</h1>
-      <p class="lead">
-        Ao confirmar, a solicitação sai de "Solicitado" para a etapa de 
-        "Em separação".
-      </p>
-    </div>
-
-    <div class="auth-card">
-      <div class="card-brand">RT</div>
-      <p class="card-title">Assumir solicitação</p>
-      <p class="card-subtitle">O.S. {{ numped }} — solicitação {{ numsol }}</p>
-
-      {% if erro %}
-        <div class="alert">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
-          {{ erro }}
-        </div>
-      {% endif %}
-
-      <div class="field">
-        <label>Solicitado por</label>
-        <input type="text" value="{{ solicitante }}" disabled>
+      <div class="login-card-intro">
+        <img class="login-logo-mini" src="{{ url_for('static', filename='img/Tiete 2022 logo nova com qualidae.png') }}" alt="Grupo Tiête">
+        <p class="login-title">Assumir solicitação</p>
+        <p class="login-subtitle">O.S. {{ numped }} — solicitação {{ numsol }}</p>
+        <p class="login-nota">
+          Confirme seu código para assumir. A solicitação sai de "Solicitado"
+          para "Em separação".
+        </p>
       </div>
 
-      <form method="POST">
-        <div class="field">
-          <label for="usuario">Seu código do Sapiens ou crachá</label>
-          <input type="text" id="usuario" name="usuario" placeholder="Escaneie o crachá" required autofocus autocomplete="off">
-        </div>
-        <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">
-          Confirmar separação
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        </button>
-      </form>
-    </div>
+      <div class="login-card-form">
+        {% if erro %}
+          <div class="login-alert">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+            {{ erro }}
+          </div>
+        {% endif %}
 
-  </div>
+        <div class="login-field">
+          <label>Solicitado por</label>
+          <input type="text" value="{{ solicitante }}" disabled>
+        </div>
+
+        <form method="POST">
+          <div class="login-field">
+            <label for="usuario">Seu código do Sapiens ou crachá</label>
+            <input type="text" id="usuario" name="usuario" placeholder="Escaneie o crachá" required autofocus autocomplete="off">
+          </div>
+          <button type="submit" class="login-btn">
+            Confirmar separação
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </aside>
 </div>
 {% endblock %}

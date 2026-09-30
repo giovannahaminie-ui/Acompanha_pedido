@@ -1,144 +1,139 @@
 {% extends "base.html" %}
 {% block title %}Pedido na loja{% endblock %}
 {% block content %}
-<div class="hero-screen">
-  <div class="hero-inner" style="grid-template-columns: 1fr;">
-    <div class="auth-card" style="max-width:720px;">
-      <div class="card-brand">RT</div>
-      <p class="card-title">Pedido na loja</p>
-      <p class="card-subtitle">
-        Solicitação {{ numsol }} — {{ itens|length }} item(ns) selecionado(s)
-      </p>
+<div class="lote-page">
 
-      {% if resultados %}
-        <p style="text-align:center; color:#666; padding:2rem 0;">Pedido processado — veja o resumo.</p>
-      {% else %}
-        <form method="POST" action="{{ url_for('pedido_loja_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}">
-          {% for item in itens %}
-          {% if item.sem_saldo %}
-          <div class="alert" style="background:var(--red-soft); border-color:var(--red-border);">
-            <strong>{{ item.codpro2 }} — {{ item.descricao }}</strong><br>
-            Sem saldo em nenhum depósito - não é possível pedir na loja.
-          </div>
-          {% else %}
-          <input type="hidden" name="seqites" value="{{ item.seqite }}">
-          <div class="field" style="display:flex; align-items:center; gap:0.75rem;">
-            <label style="flex:1; margin:0;">
-              {{ item.codpro2 }} — {{ item.descricao }}
-              <span class="aviso-saldo-loja" style="display:none; color:var(--st-separacao); font-weight:600; font-size:0.78rem;">
-                Saldo na loja insuficiente para essa quantidade.
-              </span>
-            </label>
-            <input type="number" name="qtd_{{ item.seqite }}" step="any" min="0.01" value="{{ item.qtd_sugerida }}"
-                   data-qtdest-loja="{{ item.qtdest_loja }}" class="qtd-pedido-loja" style="width:6rem;" required>
-          </div>
-          {% endif %}
-          {% endfor %}
-          <input type="hidden" name="confirmar" value="1">
-          {% if itens|rejectattr('sem_saldo')|list %}
-          <div style="display:flex; gap:0.75rem; margin-top:1rem;">
-            <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">Cancelar</a>
-            <button type="submit" class="btn-primary" id="btn-confirmar-pedido-loja" style="flex:1; justify-content:center;">Confirmar pedido</button>
-          </div>
-          {% else %}
-          <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="display:flex; justify-content:center; margin-top:1rem;">Voltar pra solicitação</a>
-          {% endif %}
-        </form>
-        <script>
-          (function () {
-            const campos = document.querySelectorAll('.qtd-pedido-loja');
-            const botaoConfirmar = document.getElementById('btn-confirmar-pedido-loja');
-            if (campos.length) campos[0].focus();
+  {% if resultados %}
+  <section class="lote-resultado" data-lote-resultado>
+    <header class="lote-topo">
+      <span class="lote-etiqueta">Solicitação {{ numsol }}</span>
+      <h1>Pedido na loja gerado</h1>
+    </header>
 
-            function algumInsuficiente() {
-              return Array.from(campos).some(function (campo) {
-                const qtdestLoja = parseFloat(campo.dataset.qtdestLoja) || 0;
-                const qtd = parseFloat(campo.value.replace(',', '.')) || 0;
-                return qtd > qtdestLoja;
-              });
-            }
+    <div class="lote-corpo">
+      <div class="lote-destaque">
+        <span class="lote-destaque-rotulo">Número do pedido</span>
+        <span class="lote-destaque-valor">{% for r in resultados %}{% if r.sucesso and r.numped %}{{ r.numped }}{% endif %}{% endfor %}</span>
+      </div>
 
-            function verificar(campo) {
-              const aviso = campo.closest('.field').querySelector('.aviso-saldo-loja');
-              const qtdestLoja = parseFloat(campo.dataset.qtdestLoja) || 0;
-              const qtd = parseFloat(campo.value.replace(',', '.')) || 0;
-              aviso.style.display = qtd > qtdestLoja ? 'block' : 'none';
-              if (botaoConfirmar) {
-                botaoConfirmar.disabled = algumInsuficiente();
-              }
-            }
+      <div class="lote-resumo">
+        <div class="lote-resumo-item">
+          <span class="lote-resumo-rotulo">Solicitação</span>
+          <span class="lote-resumo-valor">{{ numsol }}</span>
+        </div>
+        <div class="lote-resumo-item">
+          <span class="lote-resumo-rotulo">Itens processados</span>
+          <span class="lote-resumo-valor">{% set sucessos = resultados|selectattr('sucesso')|list %}{{ sucessos|length }}</span>
+        </div>
+      </div>
 
-            campos.forEach(function (campo) {
-              campo.addEventListener('input', function () { verificar(campo); });
-              verificar(campo);
-            });
+      <div class="lote-resultados">
+        {% for r in resultados %}
+        <div class="resultado-item {{ 'resultado-sucesso' if r.sucesso else 'resultado-erro' }}">
+          <p class="resultado-titulo">{{ r.item.codpro2 }} — {{ r.item.descricao }}</p>
+          <p class="resultado-msg">{{ r.mensagem }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
 
-            const form = campos.length ? campos[0].closest('form') : null;
-            if (form) {
-              form.addEventListener('submit', function (evento) {
-                if (algumInsuficiente()) {
-                  evento.preventDefault();
-                }
-              });
-            }
-          })();
-        </script>
+    <div class="lote-rodape">
+      {% if dados_relatorio_pedido %}
+      <a href="{{ url_for('relatorio_pedido_rvpe129', codemp=dados_relatorio_pedido.codemp, codfil=dados_relatorio_pedido.codfil, numped=dados_relatorio_pedido.numped) }}"
+         target="_blank" class="btn btn-primary">Imprimir pedido (relatório: RVPE129)</a>
       {% endif %}
+      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" target="_top" class="btn">Voltar pra solicitação</a>
     </div>
-  </div>
-</div>
+  </section>
 
-{% if resultados %}
-<div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-  <div style="background: white; border-radius: 8px; padding: 2rem; max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <h2 style="margin-top: 0; color: #1f2937;">Pedido na loja gerado</h2>
+  {% else %}
+  <header class="lote-topo">
+    <span class="lote-etiqueta">Solicitação {{ numsol }}</span>
+    <h1>Pedido na loja</h1>
+    <p>{{ itens|length }} item(ns) selecionado(s) — confira as quantidades e confirme.</p>
+  </header>
 
-    <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; padding: 1rem; margin-bottom: 1.5rem;">
-      <div style="text-align: center;">
-        <p style="font-size: 0.9rem; color: #666; margin: 0 0 0.5rem 0;">Número do pedido</p>
-        <p style="font-size: 2rem; font-weight: 700; font-family: monospace; color: #059669; margin: 0;">
-          {% for r in resultados %}
-            {% if r.sucesso and r.numped %}{{ r.numped }}{% endif %}
-          {% endfor %}
-        </p>
+  <form method="POST" class="lote-form" action="{{ url_for('pedido_loja_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}">
+    <div class="lote-lista">
+      {% for item in itens %}
+      {% if item.sem_saldo %}
+      <div class="lote-linha lote-linha-erro">
+        <div class="lote-linha-info">
+          <span class="lote-cod">{{ item.codpro2 }}</span>
+          <span class="lote-desc">{{ item.descricao }}</span>
+          <span class="lote-aviso">Sem saldo em nenhum depósito — não é possível pedir na loja.</span>
+        </div>
       </div>
-    </div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-      <div style="padding: 1rem; background: #f9fafb; border-radius: 4px;">
-        <p style="font-size: 0.85rem; color: #666; margin: 0 0 0.5rem 0;">Solicitação</p>
-        <p style="font-size: 1.2rem; font-weight: 600; margin: 0;">{{ numsol }}</p>
+      {% else %}
+      <input type="hidden" name="seqites" value="{{ item.seqite }}">
+      <div class="field lote-linha">
+        <div class="lote-linha-info">
+          <span class="lote-cod">{{ item.codpro2 }}</span>
+          <span class="lote-desc">{{ item.descricao }}</span>
+          <span class="aviso-saldo-loja lote-aviso" style="display:none;">Saldo na loja insuficiente para essa quantidade.</span>
+        </div>
+        <div class="lote-qtd">
+          <label>Quantidade</label>
+          <input type="number" name="qtd_{{ item.seqite }}" step="any" min="0.01" value="{{ item.qtd_sugerida }}"
+                 data-qtdest-loja="{{ item.qtdest_loja }}" class="qtd-pedido-loja" required>
+          <span class="lote-dica">Saldo na loja: {{ item.qtdest_loja }}</span>
+        </div>
       </div>
-      <div style="padding: 1rem; background: #f9fafb; border-radius: 4px;">
-        <p style="font-size: 0.85rem; color: #666; margin: 0 0 0.5rem 0;">Itens processados</p>
-        <p style="font-size: 1.2rem; font-weight: 600; margin: 0;">
-          {% set sucessos = resultados|selectattr('sucesso')|list %}
-          {{ sucessos|length }}
-        </p>
-      </div>
-    </div>
-
-    <div style="margin-bottom: 1.5rem;">
-      {% for r in resultados %}
-      <div class="resultado-item {{ 'resultado-sucesso' if r.sucesso else 'resultado-erro' }}">
-        <p style="margin: 0 0 0.25rem 0; font-weight: 600; font-size: 0.9rem;">{{ r.item.codpro2 }} — {{ r.item.descricao }}</p>
-        <p style="margin: 0; font-size: 0.85rem; color: #666;">{{ r.mensagem }}</p>
-      </div>
+      {% endif %}
       {% endfor %}
     </div>
 
-    <div style="display: flex; gap: 0.75rem;">
-      {% if dados_relatorio_pedido %}
-      <a href="{{ url_for('relatorio_pedido_rvpe129', codemp=dados_relatorio_pedido.codemp, codfil=dados_relatorio_pedido.codfil, numped=dados_relatorio_pedido.numped) }}"
-      target="_blank" class="btn-primary" style="flex: 1; padding: 0.75rem; text-align: center; text-decoration: none;">
-      Imprimir pedido ( relatório: RVPE129)
-    </a>
-    {% endif %}
-      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" style="flex: 1; padding: 0.75rem; text-align: center; background: #e5e7eb; color: #1f2937; text-decoration: none; border-radius: 4px; font-weight: 600;">
-        Voltar pra solicitação
-      </a>
+    <input type="hidden" name="confirmar" value="1">
+    <div class="lote-rodape">
+      {% if itens|rejectattr('sem_saldo')|list %}
+      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" onclick="if (window.parent !== window) { parent.fecharModalLote(); return false; }">Cancelar</a>
+      <button type="submit" class="btn btn-primary" id="btn-confirmar-pedido-loja">Confirmar pedido</button>
+      {% else %}
+      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" onclick="if (window.parent !== window) { parent.fecharModalLote(); return false; }">Voltar pra solicitação</a>
+      {% endif %}
     </div>
-  </div>
+  </form>
+
+  <script>
+    (function () {
+      const campos = document.querySelectorAll('.qtd-pedido-loja');
+      const botaoConfirmar = document.getElementById('btn-confirmar-pedido-loja');
+      if (campos.length) campos[0].focus();
+
+      function algumInsuficiente() {
+        return Array.from(campos).some(function (campo) {
+          const qtdestLoja = parseFloat(campo.dataset.qtdestLoja) || 0;
+          const qtd = parseFloat(campo.value.replace(',', '.')) || 0;
+          return qtd > qtdestLoja;
+        });
+      }
+
+      function verificar(campo) {
+        const aviso = campo.closest('.field').querySelector('.aviso-saldo-loja');
+        const qtdestLoja = parseFloat(campo.dataset.qtdestLoja) || 0;
+        const qtd = parseFloat(campo.value.replace(',', '.')) || 0;
+        aviso.style.display = qtd > qtdestLoja ? 'block' : 'none';
+        if (botaoConfirmar) {
+          botaoConfirmar.disabled = algumInsuficiente();
+        }
+      }
+
+      campos.forEach(function (campo) {
+        campo.addEventListener('input', function () { verificar(campo); });
+        verificar(campo);
+      });
+
+      const form = campos.length ? campos[0].closest('form') : null;
+      if (form) {
+        form.addEventListener('submit', function (evento) {
+          if (algumInsuficiente()) {
+            evento.preventDefault();
+          }
+        });
+      }
+    })();
+  </script>
+  {% endif %}
+
 </div>
-{% endif %}
 {% endblock %}

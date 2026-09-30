@@ -586,11 +586,20 @@ def trocar_item(codemp, codfil, numsol, seqite):
         item_pedido = oracle_db.get_item_pedido(codemp, codfil, item["numped"], item["seqipd"])
         _mark("get_item_pedido")
 
+    motivo_bloqueio = None
     if item["qtd_movimentada"]:
+        motivo_bloqueio = (
+            f"Este item já teve {item['qtd_movimentada']} unidade(s) movimentada(s) (entregue). "
+             "Não é possível trocar o item. "
+        )
+    elif item["qtd_aberta"] <= 0:
+        motivo_bloqueio = (
+            "Este item já foi atendido (sem quantidade aberta na solicitação). "
+            "Não é possível trocar - cancele o item e use \"Inserir peça\". "
+        )
+    if motivo_bloqueio:
         return render_template(
-            "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite, item=item, item_pedido=item_pedido,
-            produto=None, qtd=0, codpro_novo="", erro=None, diferenca_preco=None, alerta_preco=False, autorizado_por="", mostrar_confirmacao=False,
-            bloqueado=True,
+            "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite, item=item, item_pedido=item_pedido, produto=None, qtd=0, codpro_novo="", erro=None, diferenca_preco=None, alerta_preco=False, autorizado_por="", mostrar_confirmacao=False, bloqueado=True, motivo_bloqueio=motivo_bloqueio,
         )
 
     erro = None
@@ -609,9 +618,11 @@ def trocar_item(codemp, codfil, numsol, seqite):
         except ValueError:
             qtd = 0
 
-        if not item_pedido or qtd <= 0 or qtd > item_pedido["qtd_aberta"]:
-            maximo = item_pedido["qtd_aberta"] if item_pedido else 0
-            erro = f"Quantidade inválida - máximo {maximo} (qtd. aberta no pedido)."
+        if item["qtd_aberta"] <= 0:
+            erro = "Esse item já foi atendido (sem quantidade aberta na solicitação) - não é possível realizar a troca."
+        elif not item_pedido or qtd <= 0 or qtd > item_pedido["qtd_aberta"] or qtd >item["qtd_aberta"]:
+            maximo = min(item_pedido["qtd_aberta"], item["qtd_aberta"]) if item_pedido else 0
+            erro = f"Quantidade inválida - máximo {maximo} (quantidade aberta no pedido e na solicitação)."
         else:
             try:
                 produto = oracle_db.buscar_produto_preco(codemp, codfil, item["numped"], codpro_novo)
@@ -623,6 +634,8 @@ def trocar_item(codemp, codfil, numsol, seqite):
                     erro = f"Produto {codpro_novo} não foi encontrado."
                 elif not produto["ativo"]:
                     erro = f"Produto {codpro_novo} está inativo."
+                elif str(produto["codpro"]).strip() == str(item["codpro"]).strip():
+                    erro = "O produto novo é igual ao produto que está sendo substituído."
                 elif not produto["preco"]:
                     erro = f"Produto {codpro_novo} não possui preço - processo não pode continuar."
                 elif not oracle_db.produto_tem_ligacao_deposito(codemp, codfil, item["numped"], produto["codpro"]):
@@ -670,7 +683,8 @@ def trocar_item(codemp, codfil, numsol, seqite):
                 _mark("oracle cancelar_qtd_item_solicitacao_troca")
             except pedido_ws.PedidoWebserviceError as e:
                 erro = f"Falha ao cancelar o item substituído - nada foi alterado. {e}"
-
+            except ValueError as e:
+                erro = str(e)
             if not erro:
                 try:
                     preco_substituido = item_pedido["preco_unitario"] if item_pedido else None
@@ -705,6 +719,8 @@ def trocar_item(codemp, codfil, numsol, seqite):
                         f"O item substituído JÁ FOI CANCELADO, mas a inclusão do item novo falhou: {e} "
                         "Use o botão \"Inserir peça\" pra incluir o produto novo manualmente."
                     )
+                except ValueError as e:
+                    erro = str(e)
 
     return render_template(
         "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
@@ -1160,7 +1176,7 @@ def entrega_item(codemp, codfil, numsol):
     # Filtra apenas itens com saldo a entregar
     itens_entrega = [
     i for i in detalhe["itens"]
-    if float(i["qtd_atendida"]) > float(i["qtd_movimentada"])
+    if float(i["qtd_atendida"]) > float(i["qtd_movimentada"]) and i["sitite"] != 3
 ]
     
     if request.method == "POST":
@@ -1265,7 +1281,7 @@ def entrega_item(codemp, codfil, numsol):
         detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
         itens_entrega = [
             i for i in detalhe["itens"]
-            if float(i["qtd_atendida"]) > float(i["qtd_movimentada"])
+            if float(i["qtd_atendida"]) > float(i["qtd_movimentada"]) and i["sitite"] != 3
         ]
         resumo = f"Entregues: {', '.join(entregues)}. " if entregues else ""
         erro = resumo + "Falha em: " + " | ".join(falhas)

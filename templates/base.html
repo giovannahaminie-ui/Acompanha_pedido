@@ -5,40 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Acompanha Pedido{% endblock %} — Retificadora Tiête</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>if (window.self !== window.top) document.documentElement.classList.add('embed');</script>
 </head>
-<body{% if nome_usuario_logado and request.endpoint == 'painel' %} class="has-top-toolbar"{% endif %}>
-  <div class="bg-decor" width="10" height="14" aria-hidden="true"></div>
-  {% if nome_usuario_logado and request.endpoint == 'painel' %}
-  <div class="top-toolbar">
-    <div class="usuario-logado-chip">
-      <span class="usuario-avatar">{{ nome_usuario_logado[0]|upper }}</span>
-      <span class="usuario-nome">{{ nome_usuario_logado }}</span>
-    </div>
-    {% if perfil_logado == 'G' %}
-    <div class="admin-dropdown">
-      <button type="button" class="admin-shortcut admin-dropdown-trigger" title="Administração">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        Administração
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-      </button>
-      <div class="admin-dropdown-menu">
-        <a href="{{ url_for('admin_perfis') }}">Usuários e perfis</a>
-        <a href="{{ url_for('admin_crachas') }}">Cadastrar/editar crachás</a>
-        <a href="{{ url_for('historico_geral') }}">Histórico geral</a>
-        <a href="{{ url_for('logout') }}" class="admin-shortcut" style="color:var(--perfil-none,#b23b3b);" title="Sair da conta">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-      Sair
-    </a>
-      </div>
-    </div>
-    {% else %}
-    <a href="{{ url_for('logout') }}" class="admin-shortcut" style="color:var(--perfil-none,#b23b3b);" title="Sair da conta">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-      Sair
-    </a>
-    {% endif %}
+<body>
+  <div id="carregando" class="carregando" role="status" aria-live="polite">
+    <div class="carregando-anel"></div>
+    <span class="carregando-texto">Carregando…</span>
   </div>
-  {% endif %}
+
+  <div class="bg-decor" width="10" height="14" aria-hidden="true"></div>
   <div class="container">
     {% block content %}{% endblock %}
   </div>
@@ -69,23 +44,7 @@
     });
   </script>
   {% endif %}
-  {% if perfil_logado == 'G' and request.endpoint == 'painel' %}
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const dropdown = document.querySelector('.admin-dropdown');
-      const trigger = dropdown.querySelector('.admin-dropdown-trigger');
-      trigger.addEventListener('click', function (e) {
-        e.stopPropagation();
-        dropdown.classList.toggle('open');
-      });
-      document.addEventListener('click', function () {
-        dropdown.classList.remove('open');
-      });
-    });
-  </script>
-  {% endif %}
-
+  
   {% if nome_usuario_logado %}
   <script>
     //Logout automático por inatividade (5 min sem interação com a tela).
@@ -132,5 +91,41 @@
       }
     });
   </script>
+
+    <script>
+    // Indicador de carregamento global: aparece em qualquer navegação/envio de
+    // formulário e some quando a nova página chega (ou ao voltar pelo histórico).
+    (function () {
+      var overlay = document.getElementById('carregando');
+      if (!overlay) return;
+
+      function mostrar() { overlay.classList.add('ativo'); }
+      function ocultar() { overlay.classList.remove('ativo'); }
+      window.mostrarCarregando = mostrar;
+      window.ocultarCarregando = ocultar;
+
+      // Saiu da página (link, clique em linha, form.submit(), redirecionamento):
+      // a resposta do servidor pode demorar (webservice), então o ícone fica até a nova tela.
+      window.addEventListener('beforeunload', mostrar);
+
+      // Voltou pelo botão "voltar" do navegador (página vinda do cache)
+      window.addEventListener('pageshow', function (e) { if (e.persisted) ocultar(); });
+
+      // Formulário enviado para um iframe (pop-up de Pedir na loja/Solicitar compra):
+      // a página atual não descarrega, então mostra aqui e esconde quando o iframe carregar.
+      document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (e.defaultPrevented || !form.tagName || form.tagName !== 'FORM') return;
+        if (form.hasAttribute('data-sem-loading')) return;
+        var alvo = (form.getAttribute('target') || '').toLowerCase();
+        if (alvo === '' || alvo === '_self' || alvo === '_top' || alvo === '_parent' || alvo === '_blank') return;
+        mostrar();
+      });
+      document.addEventListener('load', function (e) {
+        if (e.target && e.target.tagName === 'IFRAME') ocultar();
+      }, true);
+    })();
+  </script>
+  
 </body>
 </html>

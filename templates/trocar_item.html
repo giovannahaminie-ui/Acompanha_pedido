@@ -1,68 +1,73 @@
-
-
 {% extends "base.html" %}
 {% block title %}Trocar item{% endblock %}
 {% block content %}
-<div class="hero-screen">
-  <div class="hero-inner" style="grid-template-columns: 1fr;">
+{% macro alerta_erro(msg) %}
+<div class="login-alert">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+  {{ msg }}
+</div>
+{% endmacro %}
 
-    <div class="auth-card" style="max-width:820px;">
-      <div class="card-brand">RT</div>
-      <p class="card-title">Trocar item</p>
-      <p class="card-subtitle">
-        Solicitação {{ numsol }} — O.S. {{ item.numped }} — produto substituído {{ item.codpro }}
-      </p>
+<div class="login-screen login-centro">
 
-      {% if erro %}
-        <div class="alert">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
-          {{ erro }}
-        </div>
-      {% endif %}
+  <div class="login-stage"></div>
 
-      {% if bloqueado %}
-        {# formulario oculto - item já movimentado, aviso vai no pop up abaixo #}
-        <div class="alert">Este item já teve {{ item.qtd_movimentada }} unidade(s) movimentada(s) (entregue) — não é possível trocar.</div>
-      {% else %}
-        <p class="field-label">Situação atual no pedido</p>
-        <div class="info-cards" style="margin-bottom:1.2rem;">
-          <div class="info-card"><div class="info-card-head">Aberta</div><div class="info-card-value">{{ item_pedido.qtd_aberta }}</div></div>
-          <div class="info-card"><div class="info-card-head">Cancelada</div><div class="info-card-value">{{ item_pedido.qtd_cancelada }}</div></div>
-          <div class="info-card"><div class="info-card-head">Faturada</div><div class="info-card-value">{{ item_pedido.qtd_faturada }}</div></div>
-        </div>
+  <aside class="login-sidebar" style="--card-w:860px;">
+    <div class="login-sidebar-inner">
 
-        {% if mostrar_confirmacao %}
-          {# ---- etapa 2: comparação de preço + confirmação ---- #}
-    <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:0 1.25rem;">
-      <div class="field">
-        <label>Produto novo</label>
-        <input type="text" value="{{ produto.codpro }} — {{ produto.descricao }}" disabled>
-        {% if produto.codfab or produto.marca %}
-        <small style="display:flex; align-items:center; gap:4px; margin-top:4px; font-size:0.85rem; color:var(--text-dim);">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="16" x2="12" y2="12"></line>
-            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-          </svg>
-          <span><strong>Prod 2:</strong> {{ produto.codfab }}{% if produto.codfab and produto.marca %} · {% endif %}{{ produto.marca }}</span>
-        </small>
-        {% endif %}
+      <div class="login-card-intro">
+        <img class="login-logo-mini" src="{{ url_for('static', filename='img/Tiete 2022 logo nova com qualidae.png') }}" alt="Grupo Tiête">
+        <p class="login-title">Trocar item</p>
+        <p class="login-subtitle">Solicitação {{ numsol }} — O.S. {{ item.numped }} — produto substituído {{ item.codpro }}</p>
       </div>
-      <div class="field">
-        <label>Marca</label>
-        <input type="text" value="{{ produto.marca or '—' }}" disabled>
-      </div>
-      <div class="field">
-        <label>Quantidade a trocar</label>
-        <input type="text" value="{{ qtd }}" disabled>
-      </div>
-    </div>
+
+      <div class="login-card-form">
+
+        {% if bloqueado %}
+          {% if erro %}{{ alerta_erro(erro) }}{% endif %}
+          {{ alerta_erro(motivo_bloqueio) }}
+          <div class="login-botoes">
+            <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="login-btn-sec">Voltar pra solicitação</a>
+          </div>
+
+        {% elif mostrar_confirmacao %}
+          {% if erro %}{{ alerta_erro(erro) }}{% endif %}
+
+          <p class="section-title">Situação atual no pedido</p>
+          <div class="info-cards">
+            <div class="info-card"><div class="info-card-head">Aberta</div><div class="info-card-value">{{ item_pedido.qtd_aberta }}</div></div>
+            <div class="info-card"><div class="info-card-head">Cancelada</div><div class="info-card-value">{{ item_pedido.qtd_cancelada }}</div></div>
+            <div class="info-card"><div class="info-card-head">Faturada</div><div class="info-card-value">{{ item_pedido.qtd_faturada }}</div></div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:0 1.25rem;">
+            <div class="login-field">
+              <label>Produto novo</label>
+              <input type="text" value="{{ produto.codpro }} — {{ produto.descricao }}" disabled>
+              {% if produto.codfab or produto.marca %}
+              <small style="display:flex; align-items:center; gap:4px; margin-top:4px; font-size:0.85rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <span><strong>Prod 2:</strong> {{ produto.codfab }}{% if produto.codfab and produto.marca %} · {% endif %}{{ produto.marca }}</span>
+              </small>
+              {% endif %}
+            </div>
+            <div class="login-field">
+              <label>Marca</label>
+              <input type="text" value="{{ produto.marca or '—' }}" disabled>
+            </div>
+            <div class="login-field">
+              <label>Quantidade a trocar</label>
+              <input type="text" value="{{ qtd }}" disabled>
+            </div>
+          </div>
 
           {% if alerta_preco %}
-            <div class="alert">
-              A diferença de preço entre o produto substituído e o produto novo passou da tolerância — confira antes de confirmar.
-            </div>
-            <div class="info-cards" style="margin-bottom:1.2rem;">
+            {{ alerta_erro('A diferença de preço entre o produto substituído e o produto novo passou da tolerância — confira antes de confirmar.') }}
+            <div class="info-cards">
               <div class="info-card">
                 <div class="info-card-head">Preço atual (substituído)</div>
                 <div class="info-card-value">{{ '%.2f'|format(item_pedido.preco_unitario) if item_pedido.preco_unitario is not none else '—' }}</div>
@@ -83,106 +88,53 @@
             <input type="hidden" name="qtd" value="{{ qtd }}">
             <input type="hidden" name="confirmar" value="1">
             {% if alerta_preco %}
-              <div class="field">
+              <div class="login-field">
                 <label for="autorizado_por">Quem autorizou a troca (diferença acima da tolerância)</label>
                 <input type="text" id="autorizado_por" name="autorizado_por" value="{{ autorizado_por }}" required autofocus>
               </div>
             {% endif %}
-            <div style="display:flex; gap:0.75rem;">
-              <a href="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}" class="btn" style="flex:1; justify-content:center;">
-                Voltar
-              </a>
-              <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">
-                Confirmar troca
-              </button>
+            <div class="login-botoes">
+              <a href="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}" class="login-btn-sec">Voltar</a>
+              <button type="submit" class="login-btn">Confirmar troca</button>
             </div>
           </form>
+
         {% else %}
-          {# ---- etapa 1: informar produto novo ---- #}
+          {% if erro %}{{ alerta_erro(erro) }}{% endif %}
+
+          <p class="section-title">Situação atual no pedido</p>
+          <div class="info-cards">
+            <div class="info-card"><div class="info-card-head">Aberta</div><div class="info-card-value">{{ item_pedido.qtd_aberta }}</div></div>
+            <div class="info-card"><div class="info-card-head">Cancelada</div><div class="info-card-value">{{ item_pedido.qtd_cancelada }}</div></div>
+            <div class="info-card"><div class="info-card-head">Faturada</div><div class="info-card-value">{{ item_pedido.qtd_faturada }}</div></div>
+          </div>
+
           <form method="POST">
-          <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 0 1.25rem;">
-            <div class="field">
-              <label for="qtd">Quantidade a trocar</label>
-              <input type="number" id="qtd" name="qtd" step="any" min="0.01" max="{{ item_pedido.qtd_aberta }}" value="{{ qtd if qtd else item_pedido.qtd_aberta }}" required autofocus>
-            </div>
-            <div class="field">
-              <label for="codpro_novo">Código do produto novo</label>
-              <div style="display:flex; gap:4px;">
-                <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required style="text-transform: uppercase; flex:1; min-width:0;" oninput="this.value = this.value.toUpperCase()">
-                <button type="button" class="btn btn-icone btn-colar-codigo" data-target="codpro_novo" title="Colar código copiado" style="flex:none; padding:0 0.5rem;">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>
-                </button>
+            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 0 1.25rem;">
+              <div class="login-field">
+                <label for="qtd">Quantidade a trocar</label>
+                <input type="number" id="qtd" name="qtd" step="any" min="0.01" max="{{ item_pedido.qtd_aberta }}" value="{{ qtd if qtd else item_pedido.qtd_aberta }}" required autofocus>
+              </div>
+              <div class="login-field">
+                <label for="codpro_novo">Código do produto novo</label>
+                <div style="display:flex; gap:4px;">
+                  <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required style="text-transform: uppercase; flex:1; min-width:0;" oninput="this.value = this.value.toUpperCase()">
+                  <button type="button" class="btn btn-icone btn-colar-codigo" data-target="codpro_novo" title="Colar código copiado" style="flex:none; padding:0 0.5rem;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-            <div style="display:flex; gap:0.75rem;">
-              <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">
-                Cancelar
-              </a>
-              <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">
-                Buscar produto
-              </button>
+            <div class="login-botoes">
+              <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="login-btn-sec">Cancelar</a>
+              <button type="submit" class="login-btn">Buscar produto</button>
             </div>
           </form>
         {% endif %}
-      {% endif %}
-    </div>
 
-  </div>
+      </div>
+    </div>
+  </aside>
+
 </div>
-
-<div id="modal-bloqueado" class="modal-alteracao{{ ' aberto' if bloqueado else '' }}">
-  <div class="modal-alteracao-content">
-    <div class="modal-alteracao-icone modal-icone-erro">
-      <svg width="22" height="22" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-    </div>
-    <h2>Não é possível trocar</h2>
-    <p>Este Item já teve {{ item.qtd_movimentada }} unidade(s) movimentada(s) entregue. Não é possível trocar o item.</p>
-    <div class="modal-alteracao-acoes">
-      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}"
-      class="btn-primary" style="flex: 1; justify-content: center;">Voltar</a>
-    </div>
-  </div>
-</div>
-<style>
-.modal-alteracao{
-  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(10, 17, 40, 0.55);
-  align-items: center; justify-content: center;
-  z-index: 1000;
-}
-
-.modal-alteracao.aberto { display: flex; }
-.modal-alteracao-content {
-  background: var(--white); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
-  padding: 2rem; max-width: 420px; width: 90%; text-align: center;
-}
-
-.modal-alteracao-icone{
-  width: 48px; height: 48px; border-radius: 50%; margin: 0 auto 1rem;
-  background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-border);
-  display: flex; align-items: center; justify-content: center;
-}
-
-.modal-alteracao-icone.modal-icone-erro {
-  background: var(--red-soft); color: var(--red-600); border-color: var(--red-border);
-}
-
-.modal-alteracao-content h2 {
-  margin: 0 0 0.6rem; font-size: 1.15rem; color: var(--navy-900);
-}
-
-.modal-alteracao-content p {
-  margin: 0 0 1.5rem; color: var(--text-dim); font-size: 0.92rem; line-height: 1.5;
-}
-
-.modal-alteracao-acoes{
-  display: flex; gap: 0.75rem;
-}
-
-.modal-alteracao-acoes .btn, .modal-alteracao-acoes
-.btn-primary {flex: 1; justify-content: center;}
-</style>
-
 {% endblock %}

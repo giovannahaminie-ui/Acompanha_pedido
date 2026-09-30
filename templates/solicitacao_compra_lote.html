@@ -1,110 +1,102 @@
 {% extends "base.html" %}
 {% block title %}Solicitação de compra{% endblock %}
 {% block content %}
-<div class="hero-screen">
-  <div class="hero-inner" style="grid-template-columns: 1fr;">
-    <div class="auth-card" style="max-width:720px;">
-      <div class="card-brand">RT</div>
-      <p class="card-title">Solicitação de compra</p>
-      <p class="card-subtitle">
-        Solicitação {{ numsol }} — {{ itens|length }} item(ns) selecionado(s)
-      </p>
+<div class="lote-page">
 
-      {% if resultados %}
-        <p style="text-align:center; color:#666; padding:2rem 0;">Solicitação processada — veja o resumo.</p>
-      {% else %}
-        <form method="POST" action="{{ url_for('solicitacao_compra_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}">
-          {% for item in itens %}
-          <input type="hidden" name="seqites" value="{{ item.seqite }}">
-          <div class="field" style="display:flex; align-items:center; gap:0.75rem;">
-            <label style="flex:1; margin:0;">
-              {{ item.codpro2 }} — {{ item.descricao }}
-              {% if item.alerta_saldo_grupo %}
-            <span style="display:block; color:#dc2626; font-weight:600; font-size: 1.0rem; text-align:center;">
-              O PRODUTO POSSUI SALDO NO GRUPO!
+  {% if resultados %}
+  <section class="lote-resultado" data-lote-resultado>
+    <header class="lote-topo">
+      <span class="lote-etiqueta">Solicitação {{ numsol }}</span>
+      <h1>Solicitação de compra gerada</h1>
+    </header>
+
+    <div class="lote-corpo">
+      <div class="lote-destaque">
+        <span class="lote-destaque-rotulo">Número da solicitação</span>
+        <span class="lote-destaque-valor">{% for r in resultados %}{% if r.sucesso and r.numsol_compra %}{{ r.numsol_compra }}{% endif %}{% endfor %}</span>
+      </div>
+
+      <div class="lote-resumo">
+        <div class="lote-resumo-item">
+          <span class="lote-resumo-rotulo">Solicitação origem</span>
+          <span class="lote-resumo-valor">{{ numsol }}</span>
+        </div>
+        <div class="lote-resumo-item">
+          <span class="lote-resumo-rotulo">Itens processados</span>
+          <span class="lote-resumo-valor">{% set sucessos = resultados|selectattr('sucesso')|list %}{{ sucessos|length }}</span>
+        </div>
+      </div>
+
+      <div class="lote-resultados">
+        {% for r in resultados %}
+        <div class="resultado-item {{ 'resultado-sucesso' if r.sucesso else 'resultado-erro' }}">
+          <p class="resultado-titulo">{{ r.item.codpro2 }} — {{ r.item.descricao }}</p>
+          <p class="resultado-msg">{{ r.mensagem }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="lote-rodape">
+      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" target="_top" class="btn">Voltar pra solicitação</a>
+    </div>
+  </section>
+
+  {% else %}
+  <header class="lote-topo">
+    <span class="lote-etiqueta">Solicitação {{ numsol }}</span>
+    <h1>Solicitação de compra</h1>
+    <p>{{ itens|length }} item(ns) selecionado(s) — informe as quantidades e confirme.</p>
+  </header>
+
+  <form method="POST" class="lote-form" action="{{ url_for('solicitacao_compra_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}">
+    <div class="lote-lista">
+      {% for item in itens %}
+      <input type="hidden" name="seqites" value="{{ item.seqite }}">
+      <div class="field lote-linha">
+        <div class="lote-linha-info">
+          <span class="lote-cod">{{ item.codpro2 }}</span>
+          <span class="lote-desc">{{ item.descricao }}</span>
+          {% if item.alerta_saldo_grupo %}
+          <span class="lote-aviso-grupo">O PRODUTO POSSUI SALDO NO GRUPO!</span>
+          {% endif %}
+        </div>
+        <div class="lote-qtd">
+          <label for="qtd_{{ item.seqite }}">Quantidade</label>
+          <input type="number" id="qtd_{{ item.seqite }}" name="qtd_{{ item.seqite }}" step="any" min="0.01"
+                 max="{{ item.qtd_sugerida }}" data-max="{{ item.qtd_sugerida }}" required {% if loop.first %}autofocus{% endif %}
+                 oninput="validarQtdCompra(this)">
+          <span class="lote-dica">Máx. em aberto: {{ item.qtd_sugerida }}</span>
+          <span id="aviso_{{ item.seqite }}" class="lote-aviso" style="display:none;">
+            Excede o saldo em aberto ({{ item.qtd_sugerida }})!
           </span>
-              {% endif %}
-            </label>
-            <div style="display:flex; flex-direction:column; align-items:flex-end;">
-            <input type="number" id="qtd_{{ item.seqite }}" name="qtd_{{ item.seqite }}" step="any" min="0.01"
-                  max="{{ item.qtd_sugerida }}" data-max="{{ item.qtd_sugerida }}" style="width:6rem;" required {% if loop.first %}autofocus{% endif %}
-                  oninput="validarQtdCompra(this)">
-            <span id="aviso_{{ item.seqite }}" style="display:none; color:var(--st-separacao); font-size:0.72rem; font-weight:600; margin-top:0.2rem; text-align:right;">
-              Excede o saldo em aberto ({{ item.qtd_sugerida }})!
-            </span>
-          </div>
-          </div>
-          {% endfor %}
-          <input type="hidden" name="confirmar" value="1">
-          <div style="display:flex; gap:0.75rem; margin-top:1rem;">
-            <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" style="flex:1; justify-content:center;">Cancelar</a>
-            <button type="submit" class="btn-primary" style="flex:1; justify-content:center;">Confirmar solicitação</button>
-          </div>
-        </form>
-      {% endif %}
-    </div>
-  </div>
-</div>
-<script>
-  function validarQtdCompra(input) {
-    const maximo = parseFloat(input.dataset.max);
-    const aviso = document.getElementById('aviso_' + input.id.replace('qtd_', ''));
-    const valor = parseFloat(input.value.replace(',', '.'));
-    if (valor > maximo) {
-      aviso.style.display = 'block';
-      input.setCustomValidity('Quantidade solicitada + já em MSO excede a quantidade em aberto do item.');
-    } else {
-      aviso.style.display = 'none';
-      input.setCustomValidity('');
-    }
-  }
-</script>
-
-{% if resultados %}
-<div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-  <div style="background: white; border-radius: 8px; padding: 2rem; max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <h2 style="margin-top: 0; color: #1f2937;">Solicitação de compra gerada</h2>
-
-    <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; padding: 1rem; margin-bottom: 1.5rem;">
-      <div style="text-align: center;">
-        <p style="font-size: 0.9rem; color: #666; margin: 0 0 0.5rem 0;">Número da solicitação</p>
-        <p style="font-size: 2rem; font-weight: 700; font-family: monospace; color: #059669; margin: 0;">
-          {% for r in resultados %}
-            {% if r.sucesso and r.numsol_compra %}{{ r.numsol_compra }}{% endif %}
-          {% endfor %}
-        </p>
-      </div>
-    </div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-      <div style="padding: 1rem; background: #f9fafb; border-radius: 4px;">
-        <p style="font-size: 0.85rem; color: #666; margin: 0 0 0.5rem 0;">Solicitação origem</p>
-        <p style="font-size: 1.2rem; font-weight: 600; margin: 0;">{{ numsol }}</p>
-      </div>
-      <div style="padding: 1rem; background: #f9fafb; border-radius: 4px;">
-        <p style="font-size: 0.85rem; color: #666; margin: 0 0 0.5rem 0;">Itens processados</p>
-        <p style="font-size: 1.2rem; font-weight: 600; margin: 0;">
-          {% set sucessos = resultados|selectattr('sucesso')|list %}
-          {{ sucessos|length }}
-        </p>
-      </div>
-    </div>
-
-    <div style="margin-bottom: 1.5rem;">
-      {% for r in resultados %}
-      <div class="resultado-item {{ 'resultado-sucesso' if r.sucesso else 'resultado-erro' }}">
-        <p style="margin: 0 0 0.25rem 0; font-weight: 600; font-size: 0.9rem;">{{ r.item.codpro2 }} — {{ r.item.descricao }}</p>
-        <p style="margin: 0; font-size: 0.85rem; color: #666;">{{ r.mensagem }}</p>
+        </div>
       </div>
       {% endfor %}
     </div>
 
-    <div style="display: flex; gap: 0.75rem;">
-      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" style="flex: 1; padding: 0.75rem; text-align: center; background: #e5e7eb; color: #1f2937; text-decoration: none; border-radius: 4px; font-weight: 600;">
-        Voltar pra solicitação
-      </a>
+    <input type="hidden" name="confirmar" value="1">
+    <div class="lote-rodape">
+      <a href="{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" class="btn" onclick="if (window.parent !== window) { parent.fecharModalLote(); return false; }">Cancelar</a>
+      <button type="submit" class="btn btn-primary">Confirmar solicitação</button>
     </div>
-  </div>
+  </form>
+
+  <script>
+    function validarQtdCompra(input) {
+      const maximo = parseFloat(input.dataset.max);
+      const aviso = document.getElementById('aviso_' + input.id.replace('qtd_', ''));
+      const valor = parseFloat(input.value.replace(',', '.'));
+      if (valor > maximo) {
+        aviso.style.display = 'block';
+        input.setCustomValidity('Quantidade solicitada + já em MSO excede a quantidade em aberto do item.');
+      } else {
+        aviso.style.display = 'none';
+        input.setCustomValidity('');
+      }
+    }
+  </script>
+  {% endif %}
+
 </div>
-{% endif %}
 {% endblock %}

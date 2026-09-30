@@ -1,38 +1,40 @@
 {% extends "base.html" %}
 {% block title %}Login{% endblock %}
 {% block content %}
-<div class="hero-screen">
-  <div class="hero-inner">
+<div class="login-screen">
 
-    <div class="hero-copy">
-      <span class="eyebrow">Grupo Tiête</span>
+  <div class="login-stage">
+    <div class="login-stage-copy">
+      <span class="login-eyebrow">Grupo Tiête</span>
       <h1>Acompanhamento de solicitações de peças, em tempo real.</h1>
     </div>
+  </div>
 
-    <div class="auth-card">
-      <div class="card-brand">RT</div>
-      <p class="card-title">Entrar</p>
-      <p class="card-subtitle">Escaneie o crachá ou insira seu código</p>
+  <aside class="login-sidebar">
+    <div class="login-sidebar-inner">
+      <img class="login-logo-mini" src="{{ url_for('static', filename='img/Tiete 2022 logo nova com qualidae.png') }}" alt="Grupo Tiête">
+      <p class="login-title">Entrar</p>
+      <p class="login-subtitle">Escaneie o crachá ou insira seu código</p>
 
       {% if erro %}
-        <div class="alert">
+        <div class="login-alert">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
           {{ erro }}
         </div>
       {% endif %}
 
       <form method="POST">
-        <div class="field">
+        <div class="login-field">
           <label for="usuario">Código ou crachá</label>
           <input type="text" id="usuario" name="usuario" placeholder="Escaneie o crachá" required autofocus autocomplete="off">
         </div>
-        <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">
+        <button type="submit" class="login-btn">
           Entrar
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
       </form>
     </div>
+  </aside>
 
-  </div>
 </div>
 {% endblock %}

@@ -2,41 +2,30 @@
 {% block title %}Solicitação {{ solicitacao.numsol }}{% endblock %}
 {% block content %}
 
-<div class="header-bar">
-  <div class="brand">
-    <div class="brand-mark">RT</div>
-    <div>
-      <h1>Detalhe da solicitação</h1>
-      <p class="subtitle">
-        <a href="{{ url_for('painel') }}">&larr; voltar ao painel</a>
-      </p>
-    </div>
-  </div>
-</div>
+<div class="os-page">
 
-<div class="detalhe-card">
-  <div class="detalhe-top">
-    <div>
-      <p class="field-label">Solicitação de peças — O.S. nº</p>
-      <p style="font-size:1.6rem; font-weight:800; margin:0.2rem 0 0; font-family:var(--font-mono); letter-spacing:-0.01em; color:var(--navy-900);">{{ solicitacao.numped }}</p>
-    </div>
-    <div style="text-align:right;">
-      <p class="field-label">Filial</p>
-      <p style="font-size:1.1rem; font-weight:700; margin:0.2rem 0 0; color:var(--navy-900);">{{ solicitacao.codfil }}</p>
-    </div>
-    <div style="text-align:right;">
-      <p class="field-label">Solicitação</p>
-      <p style="font-size:1.1rem; font-weight:700; margin:0.2rem 0 0; font-family:var(--font-mono); color:var(--navy-900);">{{ solicitacao.numsol }}</p>
-    </div>
-    <div style="text-align:right;">
-      <p class="field-label">{{ solicitacao.data_hora }}</p>
-      <span class="status-pill" style="background:var(--amber-soft); color:var(--st-separacao); border-color:var(--amber-border); margin-top:0.3rem;">
-        <span class="col-dot" style="width:7px; height:7px; background:var(--st-separacao);"></span>
-        Em separação
-      </span>
-    </div>
+<header class="os-topo">
+  <div class="os-topo-bloco os-topo-id">
+    <a class="os-voltar" href="{{ url_for('painel') }}">&larr; Painel</a>
+    <span class="os-rotulo">Solicitação de peças — O.S. nº</span>
+    <span class="os-numero">{{ solicitacao.numped }}</span>
   </div>
-</div>
+  <div class="os-topo-bloco">
+    <span class="os-rotulo">Filial</span>
+    <span class="os-valor">{{ solicitacao.codfil }}</span>
+  </div>
+  <div class="os-topo-bloco">
+    <span class="os-rotulo">Solicitação</span>
+    <span class="os-valor os-mono">{{ solicitacao.numsol }}</span>
+  </div>
+  <div class="os-topo-bloco">
+    <span class="os-rotulo">Data / hora</span>
+    <span class="os-valor">{{ solicitacao.data_hora }}</span>
+  </div>
+  <span class="os-status">Em separação</span>
+</header>
+
+<div class="os-corpo">
 
 <div class="info-cards">
   <div class="info-card">
@@ -142,6 +131,24 @@
       valueEl.insertAdjacentElement('afterend', botao);
     });
 
+        // Pop-up de confirmação de Pedir na loja / Solicitar compra
+    const modalLote = document.getElementById('modal-lote');
+    const iframeLote = document.getElementById('iframe-lote');
+    window.fecharModalLote = function () {
+      let processado = false;
+      try { processado = !!iframeLote.contentDocument.querySelector('[data-lote-resultado]'); } catch (e) {}
+      modalLote.classList.remove('open');
+      if (processado) {
+        window.location.href = "{{ url_for('detalhe_solicitacao', codemp=codemp, codfil=codfil, numsol=numsol) }}";
+      } else {
+        iframeLote.src = 'about:blank';
+      }
+    };
+    ['form-pedido-loja', 'form-solicitacao-compra'].forEach(function (id) {
+      document.getElementById(id).addEventListener('submit', function () { modalLote.classList.add('open'); });
+    });
+    document.getElementById('lote-fechar').addEventListener('click', window.fecharModalLote);
+
     // Balão de observação por item (tabela de itens) - reaproveita o mesmo
     // modal dos cards acima, sem precisar de outra tela.
     document.querySelectorAll('.btn-obs-preview').forEach(function (botao) {
@@ -188,9 +195,8 @@
 
       function atualizar() {
         const marcados = document.querySelectorAll('input[type="checkbox"][form="' + formId + '"]:checked').length;
-        contador.textContent = marcados === 0
-          ? 'Nenhum item selecionado'
-          : marcados + (marcados === 1 ? ' item selecionado' : ' itens selecionados');
+        contador.textContent = marcados;
+        contador.hidden = marcados === 0;
         botao.disabled = marcados === 0;
       }
 
@@ -233,6 +239,12 @@
       }
     });
   }
+    if (conteudo && btnRecolher) {
+    btnRecolher.addEventListener('click', function () {
+      const recolhido = conteudo.classList.toggle('recolhido');
+      btnRecolher.classList.toggle('recolhido', recolhido);
+    });
+  }
 }
 
 configurarPainelRecolhivel('painel-inserir-peca', 'btn-toggle-inserir-peca', 'painel-inserir-conteudo', 'btn-recolher-inserir', false, 'qtd_inserir');
@@ -249,25 +261,31 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
 
 </script>
 
-<form id="form-pedido-loja" method="POST" action="{{ url_for('pedido_loja_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}"></form>
-<form id="form-solicitacao-compra" method="POST" action="{{ url_for('solicitacao_compra_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}"></form>
-
-<div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.75rem; flex-wrap:wrap;">
-  <p class="section-title" style="margin:1;">Itens solicitados e saldo por depósito:</p>
+<form id="form-pedido-loja" method="POST" target="iframe-lote" action="{{ url_for('pedido_loja_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}"></form>
+<form id="form-solicitacao-compra" method="POST" target="iframe-lote" action="{{ url_for('solicitacao_compra_lote', codemp=codemp, codfil=codfil, numsol=numsol) }}"></form>
+<div id="modal-lote" class="lote-overlay">
+  <div class="lote-modal">
+    <button type="button" id="lote-fechar" class="obs-modal-close" title="Fechar" aria-label="Fechar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+    <iframe name="iframe-lote" id="iframe-lote" title="Confirmação"></iframe>
+  </div>
+</div>
+<div class="os-acoes">
   <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
     <span style="display:flex; align-items:center; gap:0.4rem;">
       <button type="submit" form="form-pedido-loja" id="btn-pedido-loja" class="btn btn-icone" title="Pedir na loja os itens marcados na coluna &quot;Pedido loja&quot;" disabled>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
         Pedir na loja
+        <span id="contador-pedido-loja" class="contador-badge" hidden>0</span>
       </button>
-      <span id="contador-pedido-loja" class="contador-selecao">Nenhum item selecionado</span>
     </span>
     <span style="display:flex; align-items:center; gap:0.4rem;">
       <button type="submit" form="form-solicitacao-compra" id="btn-solicitacao-compra" class="btn btn-icone" title="Solicitar compra dos itens marcados na coluna &quot;Solic. compra&quot;" disabled>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
         Solicitar compra
+        <span id="contador-solicitacao-compra" class="contador-badge" hidden>0</span>
       </button>
-      <span id="contador-solicitacao-compra" class="contador-selecao">Nenhum item selecionado</span>
     </span>
       <button type="button" id="btn-toggle-inserir-peca" class="btn btn-icone" title="Inserir peça nova na solicitação">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -750,17 +768,15 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
         <td class="item-observacao{{ ' item-observacao-consulta' if item.observacao else '' }}">
           {% if item.sitite in (3, 4, 6) %}
           {% if item.tem_observacao %}
-          <button type="button" class="btn-obs-preview" title="{{ item.observacao|truncate(90) }}"
-                  data-obs-titulo="Observação do item {{ item.codpro2 }}" data-obs-texto="{{ item.observacao }}">💬</button>
+                    <button type="button" class="btn-obs-preview" title="{{ item.observacao|truncate(90) }}"
+                  data-obs-titulo="Observação do item {{ item.codpro2 }}" data-obs-texto="{{ item.observacao }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          </button>
           {% else %}
           <span class="text-mute">—</span>
           {% endif %}
           {% else %}
           <div class="acoes-grid">
-            {% if item.tem_observacao %}
-            <button type="button" class="btn-obs-preview" title="{{ item.observacao|truncate(90) }}"
-                    data-obs-titulo="Observação do item {{ item.codpro2 }}" data-obs-texto="{{ item.observacao }}">💬</button>
-            {% endif %}
             <a href="{{ url_for('cancelar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=item.seqite) }}"
                class="btn btn-icone" title="Cancelar item na solicitação">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
@@ -790,5 +806,6 @@ configurarPainelRecolhivel('painel-conferencia', 'btn-toggle-conferencia', 'pain
 <p class="note">
   Depósitos exibidos variam conforme a empresa e filial do item. Só são exibidos depósitos com saldo disponível.
 </p>
-
+</div>
+</div>
 {% endblock %}

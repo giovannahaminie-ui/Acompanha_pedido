@@ -679,6 +679,13 @@ def cancelar_qtd_item_solicitacao_troca(codemp, codfil, numsol, seqite, qtd):
         SQL_CANCELAR_QTD_ITEM_TROCA,
         qtd=qtd, codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
     )
+    if cur.rowcount == 0:
+        conn.rollback()
+        conn.close()
+        raise ValueError(
+            "O cancelamento na solicitação não foi concluído (item sem quantidade aberta). "
+            "o pedido já foi cancelado no Sapiens - ajuste o item manualmente."
+        )
     cur.execute(
         SQL_CANCELAR_QTD_ITEM_TROCA_TOTAL_SE_COMPLETO,
         codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
@@ -1663,6 +1670,7 @@ SQL_ITENS_PARA_ENTREGA = """
                 AND i.usu_codfil = :codfil
                 AND i.usu_numsol = :numsol
                 AND NVL(i.usu_qtdate,0) > NVL(i.usu_qtdmov,0)
+                AND NVL(i.usu_sitite,0) <> 3
                 ORDER BY i.usu_seqite
 """
 
