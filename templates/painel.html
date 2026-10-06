@@ -26,7 +26,19 @@
     <div class="side-scroll">
 
       <form method="GET" id="form-filtros-painel" class="side-filtros">
+
         <div class="side-filtros-titulo">Filtros</div>
+        <div class="side-campo">
+          <label for="numped">O.S.</label>
+          <input type="text" id="numped" name="numped" class="input-compact" inputmode="numeric"
+                 placeholder="Núm. OS" value="{{ numped_selecionado or '' }}">
+        </div>
+
+        <div class="side-campo">
+          <label for="numsol">Solicitação</label>
+          <input type="text" id="numsol" name="numsol" class="input-compact" inputmode="numeric"
+                 placeholder="Núm. Solic." value="{{ numsol_selecionado or '' }}">
+        </div>
 
         <div class="side-campo">
           <label>Filial</label>
@@ -77,18 +89,6 @@
               {% endfor %}
             </div>
           </div>
-        </div>
-
-        <div class="side-campo">
-          <label for="numped">O.S.</label>
-          <input type="text" id="numped" name="numped" class="input-compact" inputmode="numeric"
-                 placeholder="Núm. OS" value="{{ numped_selecionado or '' }}">
-        </div>
-
-        <div class="side-campo">
-          <label for="numsol">Solicitação</label>
-          <input type="text" id="numsol" name="numsol" class="input-compact" inputmode="numeric"
-                 placeholder="Núm. Solic." value="{{ numsol_selecionado or '' }}">
         </div>
 
         <button type="submit" class="login-btn" title="Filtrar">
