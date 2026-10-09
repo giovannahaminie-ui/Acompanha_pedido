@@ -126,6 +126,77 @@
       }, true);
     })();
   </script>
+
+  <!-- Pop-up genérico: carrega o miolo (HTML) de uma rota e mostra com o fundo desfocado -->
+  <div class="modal-host" id="modal-host" aria-hidden="true">
+    <div id="modal-host-corpo"></div>
+  </div>
+  <script>
+  (function () {
+    var host = document.getElementById('modal-host');
+    var corpo = document.getElementById('modal-host-corpo');
+
+    function mostrar(html) {
+      corpo.innerHTML = html;
+      host.classList.add('open');
+      host.setAttribute('aria-hidden', 'false');
+      var campo = corpo.querySelector('[autofocus], textarea, input:not([disabled])');
+      if (campo) setTimeout(function () { campo.focus(); }, 50);
+    }
+    function tratar(r) {
+      if ((r.headers.get('content-type') || '').indexOf('json') !== -1) {
+        return r.json().then(function (j) { if (j.ir) window.location.href = j.ir; });
+      }
+      return r.text().then(mostrar);
+    }
+
+    window.abrirModal = function (url) {
+      fetch(url, { headers: { 'X-Modal': '1' }, credentials: 'same-origin' })
+        .then(tratar)
+        .catch(function () { alert('Não foi possível abrir. Tente de novo.'); });
+    };
+    window.fecharModal = function () {
+      host.classList.remove('open');
+      host.setAttribute('aria-hidden', 'true');
+      corpo.innerHTML = '';
+    };
+
+    // botão "copiar profor" dos equivalentes: copia e abre a troca no pop-up
+    window.copiarProforETrocar = function (profor, urlTrocar) {
+      try { sessionStorage.setItem('ultimoCodigoCopiado', profor); } catch (e) {}
+      var ir = function () { window.abrirModal(urlTrocar); };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(profor).then(ir, ir);
+        return;
+      }
+      var ta = document.createElement('textarea');
+      ta.value = profor; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      ir();
+    };
+
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest('a[data-modal]');
+      if (a) { e.preventDefault(); window.abrirModal(a.href); return; }
+      if (e.target === host || e.target.closest('[data-fechar-modal]')) { e.preventDefault(); window.fecharModal(); }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.fecharModal(); });
+
+    // formulários dentro do pop-up: enviam por fetch (precisam ter action="...")
+    document.addEventListener('submit', function (e) {
+      var f = e.target.closest('#modal-host form');
+      if (!f) return;
+      e.preventDefault();
+      var botao = f.querySelector('[type=submit]');
+      if (botao) botao.disabled = true;
+      fetch(f.action, { method: 'POST', headers: { 'X-Modal': '1' }, body: new FormData(f), credentials: 'same-origin' })
+        .then(tratar)
+        .catch(function () { if (botao) botao.disabled = false; alert('Falha de comunicação. Tente de novo.'); });
+    });
+  })();
+  </script>
   
 </body>
 </html>

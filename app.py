@@ -2,16 +2,13 @@
 Acompanha Pedido API/FLASK - Estoque Retífica
 
 """
-
 from datetime import datetime
 from functools import wraps
 import json
 import os
 import time
-
 from flask import Flask, render_template, request, redirect, url_for, session, current_app, jsonify, Response
 from dotenv import load_dotenv
-
 from db import local_db, oracle_db, pedido_ws
 
 load_dotenv()
@@ -21,16 +18,9 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "chave-temporaria-so-para-de
 
 local_db.init_db()
 
-# Listas usadas na tela de seleção
+# Configurações:
 EMPRESAS = [(1, "Retífica"), (2, "RTL"), (5, "Transmissões"), (12, "Tiête car")]
-# usu_filexe (e120ped) guarda letra, não código numérico de filial
 FILIAIS = [("L", "Londrina"), ("P", "Prudente"), ("C", "Cambé")] # A Filial de Cambé é a CRAF
-
-# Tolerância de diferença de preço na troca de item (produto novo vs.
-# produto substituído) - abaixo disso não mostra o comparativo de preço,
-# só pede a confirmação simples; acima, mostra o alerta com os valores e
-# passa a exigir o campo "quem autorizou" (gravado no usu_obsite do item
-# novo). Regra única: 10% do preço atual (substituído), pra qualquer item.
 TOLERANCIA_PRECO_TROCA_PERCENTUAL = 0.10
 
 # ---------------------------------------------------------------------
@@ -64,7 +54,6 @@ CODIGOS_LOGIN_DIRETO = {"675", "108", "131", "481"}
 def resolver_identificador(valor: str) -> str:
     """Recebe o que veio do campo de login / leitor de crachá e devolve o
     código de usuário do Sapiens a ser validado.
-
     O código de barras do crachá é aleatório (não é o codusu), então primeiro
     tentamos a tabela de-para local (cadastrada em /admin/crachas). Se o valor
     não estiver lá, devolvemos ele mesmo — assim o login digitado com o código
@@ -107,10 +96,20 @@ def selecao():
             "empresa": empresa,
             "filial": oracle_db.get_filial_usuario(session["usuario"]),
         }
+        session.pop("filtros_painel", None)
         return redirect(url_for("painel"))
     return render_template(
         "selecao.html",
         empresas=EMPRESAS)
+
+CAMPOS_FILTRO_PAINEL = ("numped", "numsol", "filial", "tipo_servico", "etapa")
+
+def _filtros_painel():
+    """(filtros, veio_da_url). Se a URL traz algum campo de filtro, vale ela
+    (formulário enviado); senão, o que ficou guardado na sessão."""
+    if any(c in request.args for c in CAMPOS_FILTRO_PAINEL):
+        return {c: (request.args.get(c) or "").strip() for c in CAMPOS_FILTRO_PAINEL}, True
+    return session.get("filtros_painel") or {}, False
 
 # ---------------------------------------------------------------------
 # Painel principal - tipo de serviço e etapa são usados como filtros opcionais
@@ -123,11 +122,13 @@ def _contexto_painel():
     if not filtro:
         return None
 
-    tipo_servico = request.args.get("tipo_servico") or None
-    etapa = request.args.get("etapa") or None
-    numped = request.args.get("numped") or None
-    numsol = request.args.get("numsol") or None
-    filial = request.args.get("filial", filtro.get("filial")) or None
+    f, _ = _filtros_painel()
+    tipo_servico = f.get("tipo_servico") or None
+    etapa = f.get("etapa") or None
+    numped = f.get("numped") or None
+    numsol = f.get("numsol") or None
+    # sem filial escolhida no formulário, vale a filial padrão do usuário
+    filial = (f["filial"] if "filial" in f else filtro.get("filial")) or None
     dados = oracle_db.get_solicitacoes(
         empresa=filtro.get("empresa"), filial=filial,
         tipo_servico=tipo_servico, etapa=etapa, numped=numped, numsol=numsol,
@@ -142,10 +143,6 @@ def _contexto_painel():
     tipo_servico_nome = next((nome for cod, nome in tipos_servico if str(cod) == tipo_servico), None)
     etapa_nome = next((nome for cod, nome in etapas if str(cod) == etapa), None)
 
-    # Colunas visíveis por perfil: Gerência vê tudo; Boqueta vê Solicitado
-    # e Em separação; Usinagem vê só Atendido/Parcial. Quem ainda não tem
-    # perfil atribuído vê as três colunas, mas só consulta - sem interagir
-    # (assumir solicitação, ir pro detalhe, entregar item).
     perfil = perfil_atual()
     if perfil is None:
         mostrar_solicitado = mostrar_separacao = mostrar_atendido = True
@@ -174,6 +171,7 @@ def _contexto_painel():
         numped_selecionado=numped, numsol_selecionado=numsol,
         data_hoje=datetime.now().strftime("%d/%m/%Y"),
         hora_agora=datetime.now().strftime("%H:%M"),
+        filial_manual=bool(f.get("filial")),
         filiais=FILIAIS, filial_selecionada=filial, filial_nome=nome_filial,
     )
 
@@ -184,12 +182,22 @@ def _renderizar_block(template_nome, block_nome, **contexto):
     ctx = template.new_context(contexto)
     return "".join(template.blocks[block_nome](ctx))
 
+def _fragmento(bloco, **ctx):
+    """Miolo de um pop-up: renderiza um bloco de modais.html."""
+    return _renderizar_block("modais.html", bloco, **ctx)
+
+def _pedido_de_modal():
+    """True quando a chamada vem do pop-up (JavaScript); senão a rota
+    redireciona pra tela da solicitação."""
+    return request.headers.get("X-Modal") == "1"
+
 @app.route("/painel")
 @login_obrigatorio
 def painel():
+    filtros, veio_da_url = _filtros_painel()
+    if veio_da_url:
+        session["filtros_painel"] = filtros
     ctx = _contexto_painel()
-    if ctx is None:
-        return redirect(url_for("selecao"))
     return render_template("painel.html", **ctx)
 
 @app.route("/painel/dados")
@@ -208,22 +216,19 @@ def painel_dados():
 @app.route("/solicitacao/assumir/<int:codemp>/<int:codfil>/<int:numsol>", methods=["GET", "POST"])
 @login_obrigatorio
 def assumir_solicitacao(codemp, codfil, numsol):
-    cabecalho = oracle_db.get_solicitacao_cabecalho(codemp, codfil, numsol)
-
+    """O formulário é um pop-up do painel; aqui só chega o POST (fetch).
+    Quem abrir esse endereço direto volta pro painel."""
     if request.method == "POST":
-        usuario = resolver_identificador(request.form["usuario"])
+        usuario = resolver_identificador(request.form.get("usuario", ""))
         dados = oracle_db.verificar_login(usuario)
         if dados:
             oracle_db.assumir_solicitacao(codemp, codfil, numsol, dados["usuario"])
-            return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
-        return render_template(
-            "assumir_solicitacao.html", numped=cabecalho["numped"], numsol=numsol,
-            solicitante=cabecalho["solicitante"], erro="Código de usuário inválido",
-        )
-    return render_template(
-        "assumir_solicitacao.html", numped=cabecalho["numped"], numsol=numsol,
-        solicitante=cabecalho["solicitante"],
-    )
+            return jsonify({
+                "ok": True,
+                "url": url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol),
+            })
+        return jsonify({"ok": False, "erro": "Código de usuário inválido"}), 400
+    return redirect(url_for("painel"))
 
 # ---------------------------------------------------------------------
 # Segunda tela - detalhe da solicitação (itens + saldo de estoque)
@@ -267,7 +272,7 @@ def _render_detalhe(
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>")
 @login_obrigatorio
 def detalhe_solicitacao(codemp, codfil, numsol):
-    return _render_detalhe(codemp, codfil, numsol)
+    return _render_detalhe(codemp, codfil, numsol, sucesso_troca=session.pop("sucesso_troca", None))
 
 # ---------------------------------------------------------------------
 # Observação do item (botão na coluna de Ações, por item - grava direto na
@@ -276,6 +281,11 @@ def detalhe_solicitacao(codemp, codfil, numsol):
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/observacao", methods=["GET", "POST"])
 @login_obrigatorio
 def observacao_item(codemp, codfil, numsol, seqite):
+    voltar = url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol)
+    if not _pedido_de_modal():
+        return redirect(voltar)
+    ctx = dict(codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite)
+
     if request.method == "POST":
         comentario_novo = request.form.get("observacao", "").strip()
         if comentario_novo:
@@ -284,30 +294,27 @@ def observacao_item(codemp, codfil, numsol, seqite):
                 oracle_db.salvar_observacao_item(codemp, codfil, numsol, seqite, linha)
             except Exception:
                 observacao = oracle_db.get_observacao_item(codemp, codfil, numsol, seqite)
-                return render_template(
-                    "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-                    observacao=observacao,
-                    erro="Falha ao salvar a observação - tente novamente.",
-                )
-        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+                return _fragmento("obs_item", observacao=observacao,
+                                  erro="Falha ao salvar a observação - tente novamente.", **ctx)
+        return jsonify({"ir": voltar})
+
     try:
         observacao = oracle_db.get_observacao_item(codemp, codfil, numsol, seqite)
     except Exception:
         observacao = ""
-    return render_template(
-        "observacao_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-        observacao=observacao,
-    )
-
+    return _fragmento("obs_item", observacao=observacao, **ctx)
 # ---------------------------------------------------------------------
 # Cancelar item na solicitação (só realiza UPDATE na T120SIT)
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/cancelar", methods=["GET", "POST"])
 @login_obrigatorio
 def cancelar_item(codemp, codfil, numsol, seqite):
+    voltar = url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol)
+    if not _pedido_de_modal():
+        return redirect(voltar)
     item = oracle_db.get_item_solicitacao(codemp, codfil, numsol, seqite)
     if not item:
-        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+        return jsonify({"ir": voltar})
 
     erro = None
     motivo = ""
@@ -322,12 +329,10 @@ def cancelar_item(codemp, codfil, numsol, seqite):
             #  - se além disso já entregou tudo -> Entregue (usu_sitsol=6)
             oracle_db.marcar_conferencia_concluida(codemp, codfil, numsol, session["usuario"])
             oracle_db.finalizar_solicitacao_entregue(codemp, codfil, numsol, session["usuario"])
-            return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
+            return jsonify({"ir": voltar})
 
-    return render_template(
-        "cancelar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-        item=item, erro=erro, motivo=motivo,
-    )
+    return _fragmento("cancelar_item", codemp=codemp, codfil=codfil, numsol=numsol,
+                      seqite=seqite, item=item, erro=erro, motivo=motivo)
             
 # ---------------------------------------------------------------------
 # Inserir peça nova na solicitação + no pedido (webservice GravarPedidos_15).
@@ -578,13 +583,15 @@ def trocar_item(codemp, codfil, numsol, seqite):
         agora = time.perf_counter()
         print(f"[TROCA numsol={numsol} seq={seqite}] {nome}: {agora - _t[0]:.2f}s", flush=True)
         _t[0] = agora
+        voltar = url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol)
+    if not _pedido_de_modal():
+        return redirect(voltar)
     # ------------------------------------------------------------------
 
     item = oracle_db.get_item_solicitacao(codemp, codfil, numsol, seqite)
     _mark("get_item_solicitacao")
     if not item:
-        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
-
+        return jsonify({"ir": voltar})
     item_pedido = None
     if item["seqipd"]:
         item_pedido = oracle_db.get_item_pedido(codemp, codfil, item["numped"], item["seqipd"])
@@ -602,8 +609,8 @@ def trocar_item(codemp, codfil, numsol, seqite):
             "Não é possível trocar - cancele o item e use \"Inserir peça\". "
         )
     if motivo_bloqueio:
-        return render_template(
-            "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite, item=item, item_pedido=item_pedido, produto=None, qtd=0, codpro_novo="", erro=None, diferenca_preco=None, alerta_preco=False, autorizado_por="", mostrar_confirmacao=False, bloqueado=True, motivo_bloqueio=motivo_bloqueio,
+        return _fragmento(
+            "trocar", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite, item=item, item_pedido=item_pedido, produto=None, qtd=0, codpro_novo="", erro=None, diferenca_preco=None, alerta_preco=False, autorizado_por="", mostrar_confirmacao=False, bloqueado=True, motivo_bloqueio=motivo_bloqueio,
         )
 
     erro = None
@@ -715,9 +722,8 @@ def trocar_item(codemp, codfil, numsol, seqite):
                     sucesso_troca = f"Troca concluída: {item['codpro']} trocado por {produto['codpro']} - {produto['descricao']}."
                     if alerta_preco:
                         _mark("oracle salvar_observacao_item")
-                    resposta = _render_detalhe(codemp, codfil, numsol, sucesso_troca=sucesso_troca)
-                    _mark("_render_detalhe (get_solicitacao_detalhe + template)")
-                    return resposta
+                    session["sucesso_troca"] = sucesso_troca
+                    return jsonify({"ir": voltar})
                 except pedido_ws.PedidoWebserviceError as e:
                     erro = (
                         f"O item substituído JÁ FOI CANCELADO, mas a inclusão do item novo falhou: {e} "
@@ -726,8 +732,8 @@ def trocar_item(codemp, codfil, numsol, seqite):
                 except ValueError as e:
                     erro = str(e)
 
-    return render_template(
-        "trocar_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+    return _fragmento(
+        "trocar", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
         item=item, item_pedido=item_pedido, produto=produto, qtd=qtd, codpro_novo=codpro_novo, erro=erro,
         diferenca_preco=diferenca_preco, alerta_preco=alerta_preco, autorizado_por=autorizado_por,
         mostrar_confirmacao=mostrar_confirmacao,
@@ -1005,37 +1011,18 @@ def solicitacao_compra_lote(codemp, codfil, numsol):
     )
 
 # ---------------------------------------------------------------------
-# Histórico do item - consulta, sem gravação. Reaproveita
-# get_solicitacao_detalhe (mesmo dado já usado na tela principal), só que
-# focado num item só: quantidades, vínculo com pedido/solicitação de
-# compra, e o log de observações (cancelamento/troca/comentários).
-# ---------------------------------------------------------------------
-@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/historico")
-@login_obrigatorio
-def historico_item(codemp, codfil, numsol, seqite):
-    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol, seqites_saldo=set())
-    item = next((i for i in detalhe["itens"] if i["seqite"] == seqite), None)
-    if not item:
-        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
-    log_observacoes = [linha.strip() for linha in item["observacao"].split("\n") if linha.strip()]
-    return render_template(
-        "historico_item.html", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
-        item=item, log_observacoes=log_observacoes,
-    )
-
-# ---------------------------------------------------------------------
 # Itens equivalentes (E075EQUI) - consulta, sem gravação
 # ---------------------------------------------------------------------
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/equivalentes/<codpro>")
 @login_obrigatorio
 def equivalentes_item(codemp, codfil, numsol, seqite, codpro):
+    if not _pedido_de_modal():
+        return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
     equivalentes = oracle_db.get_equivalentes(codemp, codpro)
-    return render_template(
-        "equivalentes_item.html",
-        codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite, codpro=codpro,
-        equivalentes=equivalentes,
+    return _fragmento(
+        "equivalentes", codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite,
+        codpro=codpro, equivalentes=equivalentes,
     )
-
 # ---------------------------------------------------------------------
 # Administração de perfis (só Gerência)
 # ===== HISTÓRICO DE AÇÕES =====
@@ -1196,6 +1183,9 @@ def api_itens_entrega(codemp, codfil, numsol):
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/entrega", methods=["GET", "POST"])
 @login_obrigatorio
 def entrega_item(codemp, codfil, numsol):
+    voltar = url_for("painel")
+    if not _pedido_de_modal():
+        return redirect(voltar)
     detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol, seqites_saldo=set())
     
     # Filtra apenas itens com saldo a entregar
@@ -1209,9 +1199,16 @@ def entrega_item(codemp, codfil, numsol):
         itens_selecionados = [i for i in itens_entrega if i["seqite"] in seqites]
 
         if not itens_selecionados:
-            return render_template(
-                "entrega_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
-                itens=itens_entrega, erro="Nenhum item selecionado", detalhe=detalhe
+            return _fragmento(
+                "entrega", codemp=codemp, codfil=codfil, numsol=numsol,
+                itens=itens_entrega, erro="Nenhum item selecionado", detalhe=detalhe,
+            )
+
+        # Etapa 1: ainda não confirmou - mostra os itens marcados pra conferência
+        if request.form.get("confirmar") != "1":
+            return _fragmento(
+                "entrega_confirmar", codemp=codemp, codfil=codfil, numsol=numsol,
+                itens=itens_selecionados,
             )
 
         # Dados comuns a todos os itens (mesma solicitação / mesmo pedido)
@@ -1304,28 +1301,29 @@ def entrega_item(codemp, codfil, numsol):
             if entregues and not finalizada:
                 abertos, a_entregar = oracle_db.contar_pendencias(codemp, codfil, numsol)
                 if abertos and not a_entregar:
-                    return render_template(
-                        "entrega_pergunta.html", codemp=codemp, codfil=codfil, numsol=numsol,
+                    return _fragmento(
+                        "entrega_pergunta", codemp=codemp, codfil=codfil, numsol=numsol,
                         numped=detalhe["solicitacao"]["numped"], abertos=abertos,
                     )
-            return redirect(url_for("painel"))
-        # Alguns itens falharam: recarrega a tela mostrando o saldo real
-        # (os que foram entregues já saem da lista) e o resumo do que faltou.
-        detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+            return jsonify({"ir": voltar})
+
+        # Alguns itens falharam: recarrega a lista mostrando o saldo real
+        # (os que foram entregues já saem) e o resumo do que faltou.
+        detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol, seqites_saldo=set())
         itens_entrega = [
             i for i in detalhe["itens"]
             if float(i["qtd_atendida"]) > float(i["qtd_movimentada"]) and i["sitite"] != 3
         ]
         resumo = f"Entregues: {', '.join(entregues)}. " if entregues else ""
         erro = resumo + "Falha em: " + " | ".join(falhas)
-        return render_template(
-            "entrega_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
-            itens=itens_entrega, erro=erro, detalhe=detalhe
+        return _fragmento(
+            "entrega", codemp=codemp, codfil=codfil, numsol=numsol,
+            itens=itens_entrega, erro=erro, detalhe=detalhe, recarregar=bool(entregues),
         )
-    
-    return render_template(
-        "entrega_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
-        itens=itens_entrega, detalhe=detalhe
+
+    return _fragmento(
+        "entrega", codemp=codemp, codfil=codfil, numsol=numsol,
+        itens=itens_entrega, detalhe=detalhe,
     )
 
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/voltar-separacao", methods=["POST"])
@@ -1338,6 +1336,8 @@ def voltar_separacao(codemp, codfil, numsol):
             codemp=codemp, codfil=codfil, numsol=numsol,
             detalhes="Entrega parcial concluída - voltou para Em separação",
         )
+    if _pedido_de_modal():
+        return jsonify({"ir": url_for("painel")})
     return redirect(url_for("painel"))
 
 @app.route("/pedido/<int:codemp>/<int:codfil>/<int:numped>/relatorio")

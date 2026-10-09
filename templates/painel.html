@@ -5,16 +5,17 @@
 <div class="painel-app" id="painel-app">
 
   <aside class="painel-side" id="painel-side">
-         <div class="side-top">
+      <div class="side-top">
       <div class="side-linha-contexto">
         <span class="side-contexto" title="{{ contexto }}">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="10" height="18" rx="1"></rect><path d="M14 9h5a1 1 0 0 1 1 1v11h-6"></path><line x1="8" y1="7" x2="10" y2="7"></line><line x1="8" y1="11" x2="10" y2="11"></line><line x1="8" y1="15" x2="10" y2="15"></line></svg>
           <span class="side-text side-emp"><strong>Empresa {{ empresa_num }}</strong><small>{{ empresa_nome }}{% if filial_selecionada %} · {{ filial_nome }}{% endif %}</small></span>
+        </span>
         <a href="{{ url_for('selecao') }}" class="side-icone" title="Trocar seleção" aria-label="Trocar seleção">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
         </a>
       </div>
-        <button type="button" id="btn-side-toggle" class="side-toggle" title="Recolher / expandir menu" aria-label="Recolher ou expandir menu">
+      <button type="button" id="btn-side-toggle" class="side-toggle" title="Recolher / expandir menu" aria-label="Recolher ou expandir menu">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
       </button>
       <button type="button" id="btn-side-filtros" class="side-link side-so-recolhido" title="Filtros">
@@ -25,7 +26,6 @@
     <div class="side-scroll">
 
       <form method="GET" id="form-filtros-painel" class="side-filtros">
-
         <div class="side-filtros-titulo">Filtros</div>
           <div class="side-busca">
             <input type="text" id="numped" name="numped" class="input-compact" inputmode="numeric"
@@ -179,7 +179,8 @@
             </thead>
             <tbody>
               {% for item in solicitados %}
-              <tr {% if not somente_visualizacao %}ondblclick="assumirSolicitacao('{{ item.codemp }}','{{ item.codfil }}','{{ item.numsol }}')" title="Duplo clique para assumir"{% endif %}>
+                <tr {% if not somente_visualizacao %}data-codemp="{{ item.codemp }}" data-codfil="{{ item.codfil }}" data-numsol="{{ item.numsol }}" data-numped="{{ item.numped }}" data-solicitante="{{ item.solicitante }}"
+                  ondblclick="abrirAssumir(this)" title="Duplo clique para assumir"{% endif %}>
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
                 <td><span class="mono num">{{ item.numped }}</span></td>
@@ -263,20 +264,28 @@
           <table>
             <thead>
               <tr>
-                <th style="width:30%;">Data/hora</th>
-                <th style="width:14%;">Fil.</th>
-                <th style="width:28%;">O.S.</th>
-                <th style="width:28%;">Solic.</th>
+                <th style="width:28%;">Data/hora</th>
+                <th style="width:12%;">Fil.</th>
+                <th style="width:26%;">O.S.</th>
+                <th style="width:26%;">Solic.</th>
+                <th style="width:44px;"></th>
               </tr>
             </thead>
             <tbody>
               {% for item in atendidos %}
               <tr class="linha-atendida{% if not somente_visualizacao %} linha-clicavel{% endif %}{% if item.tem_item_entrega %} linha-disponivel{% endif %}" data-codemp="{{ item.codemp }}" data-codfil="{{ item.codfil }}" data-numsol="{{ item.numsol }}"
-                  {% if not somente_visualizacao %}onclick="window.location.href='{{ url_for('entrega_item', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol )}}'" title="Clique para retirar itens"{% endif %}>
+                {% if not somente_visualizacao %}onclick="abrirModal('{{ url_for('entrega_item', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol) }}')" title="{{ 'Clique para retirar itens' if item.tem_item_entrega else 'Nada para entregar agora - use o botão ao lado para ver os detalhes' }}"{% endif %}>
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
                 <td><span class="mono num">{{ item.numped }}</span></td>
                 <td><span class="mono num">{{ item.numsol }}</span></td>
+                <td class="col-detalhe">
+                  {% if not somente_visualizacao %}
+                  <a href="{{ url_for('detalhe_solicitacao', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol) }}" class="btn-detalhe" onclick="event.stopPropagation();" title="Ver detalhes da solicitação" aria-label="Ver detalhes da solicitação">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="14" y2="17"></line></svg>
+                  </a>
+                  {% endif %}
+                </td>
               </tr>
               {% endfor %}
             </tbody>
@@ -301,6 +310,52 @@
   </main>
 </div>
 
+<!-- Pop-up: assumir solicitação -->
+<div class="assumir-overlay" id="modal-assumir" aria-hidden="true">
+  <div class="ent-card ent-card-estreito" role="dialog" aria-modal="true" aria-labelledby="assumir-titulo">
+
+    <button type="button" class="ent-voltar" onclick="fecharAssumir()" title="Voltar ao painel" aria-label="Voltar ao painel">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+    </button>
+
+    <h1 class="ent-titulo" id="assumir-titulo">Assumir solicitação</h1>
+    <p class="ent-sub" id="assumir-sub"></p>
+    <p class="ent-nota">
+      Confirme seu código para assumir. A solicitação sai de "Solicitado"
+      para "Em separação".
+    </p>
+
+    <div class="ent-alerta" id="assumir-erro" hidden>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+      <span id="assumir-erro-txt"></span>
+    </div>
+
+    <div class="lg2-field">
+      <label>Solicitado por</label>
+      <div class="lg2-input">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        <input type="text" id="assumir-solicitante" value="" disabled>
+      </div>
+    </div>
+
+    <form id="form-assumir" autocomplete="off">
+      <div class="lg2-field">
+        <label for="assumir-usuario">Seu código do Sapiens ou crachá</label>
+        <div class="lg2-input">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="11" r="2"></circle><line x1="14" y1="10" x2="18" y2="10"></line><line x1="14" y1="14" x2="18" y2="14"></line></svg>
+          <input type="text" id="assumir-usuario" name="usuario" placeholder="Escaneie o crachá" required autocomplete="off">
+        </div>
+      </div>
+
+      <div class="ent-botoes" style="margin-top:1.25rem;">
+        <button type="button" class="ent-btn ent-btn-sec" onclick="fecharAssumir()">Cancelar</button>
+        <button type="submit" class="ent-btn ent-btn-prim" id="assumir-enviar">Confirmar separação</button>
+      </div>
+    </form>
+
+  </div>
+</div>
+
 <script>
   // Relógio simples no cabeçalho
   function atualizarRelogio() {
@@ -314,10 +369,64 @@
     setInterval(atualizarRelogio, 30000);
   }
 
-  function assumirSolicitacao(codemp, codfil, numsol) {
-    const url = `/solicitacao/assumir/${codemp}/${codfil}/${numsol}`;
-    window.location.href = url;
+    // Pop-up de assumir solicitação (fundo desfocado)
+  let assumirAlvo = null;
+
+  function abrirAssumir(tr) {
+    assumirAlvo = { codemp: tr.dataset.codemp, codfil: tr.dataset.codfil, numsol: tr.dataset.numsol };
+    document.getElementById('assumir-sub').textContent =
+      'O.S. ' + tr.dataset.numped + ' — solicitação ' + tr.dataset.numsol;
+    document.getElementById('assumir-solicitante').value = tr.dataset.solicitante || '';
+    document.getElementById('assumir-erro').hidden = true;
+    const campo = document.getElementById('assumir-usuario');
+    campo.value = '';
+    document.getElementById('assumir-enviar').disabled = false;
+    const modal = document.getElementById('modal-assumir');
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    setTimeout(function () { campo.focus(); }, 50);
   }
+
+  function fecharAssumir() {
+    const modal = document.getElementById('modal-assumir');
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    assumirAlvo = null;
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('modal-assumir');
+    modal.addEventListener('click', function (e) { if (e.target === modal) fecharAssumir(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fecharAssumir(); });
+
+    document.getElementById('form-assumir').addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!assumirAlvo) return;
+      const campo = document.getElementById('assumir-usuario');
+      const botao = document.getElementById('assumir-enviar');
+      const erro = document.getElementById('assumir-erro');
+      botao.disabled = true;
+      fetch('/solicitacao/assumir/' + assumirAlvo.codemp + '/' + assumirAlvo.codfil + '/' + assumirAlvo.numsol, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ usuario: campo.value }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.ok) { window.location.href = j.url; return; }
+          document.getElementById('assumir-erro-txt').textContent = j.erro || 'Não foi possível assumir.';
+          erro.hidden = false;
+          botao.disabled = false;
+          campo.value = '';
+          campo.focus();
+        })
+        .catch(function () {
+          document.getElementById('assumir-erro-txt').textContent = 'Falha de comunicação. Tente de novo.';
+          erro.hidden = false;
+          botao.disabled = false;
+        });
+    });
+  });
 
    // Barra lateral: expandir/recolher (lembra a preferência no navegador)
   document.addEventListener('DOMContentLoaded', function () {

@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{# Cada bloco abaixo é o miolo de um pop-up. Nunca é aberto como página. #}
+
+{% block obs_item %}
+<div class="ent-card" style="max-width:900px;">
+  <button type="button" class="ent-voltar" data-fechar-modal title="Voltar" aria-label="Voltar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+  </button>
+  <h1 class="ent-titulo">Observação do item</h1>
+  <p class="ent-sub">Solicitação {{ numsol }}</p>
+
+  {% if erro %}<div class="ent-alerta">{{ erro }}</div>{% endif %}
+
+  {% if observacao %}
+  <div class="lg2-field">
+    <label>Histórico (não editável)</label>
+    <div class="ent-historico">{{ observacao }}</div>
+  </div>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('observacao_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}">
+    <div class="lg2-field">
+      <label for="observacao">{{ 'Acrescentar comentário' if observacao else 'Observação' }}</label>
+      <textarea id="observacao" name="observacao" class="ent-textarea" placeholder="Ex: peça avariada, aguardando substituição..." autofocus></textarea>
+    </div>
+    <div class="ent-botoes">
+      <button type="button" class="ent-btn ent-btn-sec" data-fechar-modal>Cancelar</button>
+      <button type="submit" class="ent-btn ent-btn-prim">Salvar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block cancelar_item %}
+<div class="ent-card" style="max-width:520px;">
+  <button type="button" class="ent-voltar" data-fechar-modal title="Voltar" aria-label="Voltar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+  </button>
+  <h1 class="ent-titulo">Cancelar item na solicitação</h1>
+  <p class="ent-sub">Solicitação {{ numsol }} — produto {{ item.codpro }}</p>
+
+  {% if erro %}<div class="ent-alerta">{{ erro }}</div>{% endif %}
+
+  <div class="lg2-field">
+    <label>Qtd. aberta atualmente (será toda cancelada)</label>
+    <div class="lg2-input"><input type="text" value="{{ item.qtd_aberta }}" disabled style="padding-left:.85rem;"></div>
+  </div>
+
+  <form method="POST" action="{{ url_for('cancelar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}">
+    <div class="lg2-field">
+      <label for="motivo">Motivo do cancelamento</label>
+      <textarea id="motivo" name="motivo" class="ent-textarea" placeholder="Ex: Insira aqui o motivo do cancelamento..." autofocus>{{ motivo or '' }}</textarea>
+    </div>
+    <div class="ent-botoes">
+      <button type="button" class="ent-btn ent-btn-sec" data-fechar-modal>Voltar</button>
+      <button type="submit" class="ent-btn ent-btn-prim">Confirmar cancelamento</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block equivalentes %}
+<div class="ent-card" style="max-width:820px;">
+  <button type="button" class="ent-voltar" data-fechar-modal title="Voltar" aria-label="Voltar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+  </button>
+  <h1 class="ent-titulo">Itens equivalentes</h1>
+  <p class="ent-sub">Produto {{ codpro }} — solicitação {{ numsol }}</p>
+
+  <div class="ent-equiv-lista">
+    {% for eq in equivalentes %}
+    <div class="ent-equiv-row">
+      <div class="ent-equiv-esq">
+        <span class="ent-equiv-cod">{{ eq.profor or eq.codigo }}</span>
+        <div>
+          <div class="ent-equiv-tit">{{ eq.descricao }}</div>
+          <div class="ent-equiv-sub">{{ [eq.marca, eq.derivacao] | select | join(' · ') or '—' }}{% if eq.profor %} · cód. interno {{ eq.codigo }}{% endif %}</div>
+        </div>
+      </div>
+      <div class="ent-equiv-dir">
+        <div style="display:flex; align-items:center; gap:.5rem;">
+          <span class="ent-equiv-preco">{{ '%.2f'|format(eq.preco) if eq.preco is not none else '—' }}</span>
+          {% if eq.profor %}
+          <button type="button" class="btn btn-icone" title="Copiar profor e ir para Trocar item"
+                  data-profor="{{ eq.profor }}"
+                  data-url="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}"
+                  onclick="copiarProforETrocar(this.dataset.profor, this.dataset.url)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+          {% endif %}
+        </div>
+        <span class="ent-equiv-saldo {{ 'sem-saldo' if not eq.saldos else '' }}">{% for dep in eq.saldos %}{{ dep.deposito }}:{{ dep.saldo }}{{ ' · ' if not loop.last }}{% else %}sem saldo{% endfor %}</span>
+      </div>
+    </div>
+    {% else %}
+    <div class="ent-vazio">Nenhum equivalente cadastrado para esse produto.</div>
+    {% endfor %}
+  </div>
+
+  <div class="ent-botoes">
+    <button type="button" class="ent-btn ent-btn-sec" data-fechar-modal>Voltar à solicitação</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block trocar %}
+<div class="ent-card" style="max-width:820px;">
+  <button type="button" class="ent-voltar" data-fechar-modal title="Voltar" aria-label="Voltar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+  </button>
+  <h1 class="ent-titulo">Trocar item</h1>
+  <p class="ent-sub">Solicitação {{ numsol }} — O.S. {{ item.numped }} — produto substituído {{ item.codpro }}</p>
+
+  {% if bloqueado %}
+    {% if erro %}<div class="ent-alerta">{{ erro }}</div>{% endif %}
+    <div class="ent-alerta">{{ motivo_bloqueio }}</div>
+    <div class="ent-botoes">
+      <button type="button" class="ent-btn ent-btn-sec" data-fechar-modal>Voltar pra solicitação</button>
+    </div>
+
+  {% elif mostrar_confirmacao %}
+    {% if erro %}<div class="ent-alerta">{{ erro }}</div>{% endif %}
+
+    <p class="section-title">Situação atual no pedido</p>
+    <div class="info-cards">
+      <div class="info-card"><div class="info-card-head">Aberta</div><div class="info-card-value">{{ item_pedido.qtd_aberta }}</div></div>
+      <div class="info-card"><div class="info-card-head">Cancelada</div><div class="info-card-value">{{ item_pedido.qtd_cancelada }}</div></div>
+      <div class="info-card"><div class="info-card-head">Faturada</div><div class="info-card-value">{{ item_pedido.qtd_faturada }}</div></div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:0 1.25rem;">
+      <div class="lg2-field">
+        <label>Produto novo</label>
+        <div class="lg2-input sem-icone"><input type="text" value="{{ produto.codpro }} — {{ produto.descricao }}" disabled></div>
+        {% if produto.codfab or produto.marca %}
+        <small style="display:block; margin-top:4px; font-size:.78rem; color:var(--lg-blue-1);"><strong>Prod 2:</strong> {{ produto.codfab }}{% if produto.codfab and produto.marca %} · {% endif %}{{ produto.marca }}</small>
+        {% endif %}
+      </div>
+      <div class="lg2-field">
+        <label>Marca</label>
+        <div class="lg2-input sem-icone"><input type="text" value="{{ produto.marca or '—' }}" disabled></div>
+      </div>
+      <div class="lg2-field">
+        <label>Quantidade a trocar</label>
+        <div class="lg2-input sem-icone"><input type="text" value="{{ qtd }}" disabled></div>
+      </div>
+    </div>
+
+    {% if alerta_preco %}
+      <div class="ent-alerta">A diferença de preço entre o produto substituído e o produto novo passou da tolerância — confira antes de confirmar.</div>
+      <div class="info-cards">
+        <div class="info-card">
+          <div class="info-card-head">Preço atual (substituído)</div>
+          <div class="info-card-value">{{ '%.2f'|format(item_pedido.preco_unitario) if item_pedido.preco_unitario is not none else '—' }}</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-head">Preço do produto novo</div>
+          <div class="info-card-value">{{ '%.2f'|format(produto.preco) }}</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-head">Diferença</div>
+          <div class="info-card-value">{{ '%.2f'|format(diferenca_preco) }}</div>
+        </div>
+      </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}">
+      <input type="hidden" name="codpro_novo" value="{{ codpro_novo }}">
+      <input type="hidden" name="qtd" value="{{ qtd }}">
+      <input type="hidden" name="confirmar" value="1">
+      {% if alerta_preco %}
+        <div class="lg2-field">
+          <label for="autorizado_por">Quem autorizou a troca (diferença acima da tolerância)</label>
+          <div class="lg2-input sem-icone"><input type="text" id="autorizado_por" name="autorizado_por" value="{{ autorizado_por }}" required autofocus></div>
+        </div>
+      {% endif %}
+      <div class="ent-botoes">
+        <a href="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}" data-modal class="ent-btn ent-btn-sec">Voltar</a>
+        <button type="submit" class="ent-btn ent-btn-prim">Confirmar troca</button>
+      </div>
+    </form>
+
+  {% else %}
+    {% if erro %}<div class="ent-alerta">{{ erro }}</div>{% endif %}
+
+    <p class="section-title">Situação atual no pedido</p>
+    <div class="info-cards">
+      <div class="info-card"><div class="info-card-head">Aberta</div><div class="info-card-value">{{ item_pedido.qtd_aberta }}</div></div>
+      <div class="info-card"><div class="info-card-head">Cancelada</div><div class="info-card-value">{{ item_pedido.qtd_cancelada }}</div></div>
+      <div class="info-card"><div class="info-card-head">Faturada</div><div class="info-card-value">{{ item_pedido.qtd_faturada }}</div></div>
+    </div>
+
+    <form method="POST" action="{{ url_for('trocar_item', codemp=codemp, codfil=codfil, numsol=numsol, seqite=seqite) }}">
+      <div style="display:grid; grid-template-columns:1fr 2fr; gap:0 1.25rem;">
+        <div class="lg2-field">
+          <label for="qtd">Quantidade a trocar</label>
+          <div class="lg2-input sem-icone"><input type="number" id="qtd" name="qtd" step="any" min="0.01" max="{{ item_pedido.qtd_aberta }}" value="{{ qtd if qtd else item_pedido.qtd_aberta }}" required autofocus></div>
+        </div>
+        <div class="lg2-field">
+          <label for="codpro_novo">Código do produto novo</label>
+          <div style="display:flex; gap:6px;">
+            <div class="lg2-input sem-icone" style="flex:1; min-width:0;">
+              <input type="text" id="codpro_novo" name="codpro_novo" value="{{ codpro_novo }}" required style="text-transform:uppercase;" oninput="this.value = this.value.toUpperCase()">
+            </div>
+            <button type="button" class="btn btn-icone btn-colar-codigo" data-target="codpro_novo" title="Colar código copiado" style="flex:none; padding:0 .6rem; height:42px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="ent-botoes">
+        <button type="button" class="ent-btn ent-btn-sec" data-fechar-modal>Cancelar</button>
+        <button type="submit" class="ent-btn ent-btn-prim">Buscar produto</button>
+      </div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block entrega %}
+<div class="ent-card" style="max-width:560px;">
+  {% if recarregar %}
+  <a href="{{ url_for('painel') }}" class="ent-voltar" title="Voltar ao painel" aria-label="Voltar ao painel">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+  </a>
+  {% else %}
+  <button type="button" class="ent-voltar" data-fechar-modal title="Voltar ao painel" aria-label="Voltar ao painel">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+  </button>
+  {% endif %}
+
+  <h1 class="ent-titulo">Entrega de itens</h1>
+  <p class="ent-sub">Solicitação {{ numsol }} — O.S. {{ detalhe.solicitacao.numped }}</p>
+
+  {% if erro %}<div class="ent-alerta">{{ erro }}</div>{% endif %}
+
+  {% if itens %}
+    <form method="POST" action="{{ url_for('entrega_item', codemp=codemp, codfil=codfil, numsol=numsol) }}">
+      <label class="ent-todos">
+        <input type="checkbox" id="entrega-todos" class="ent-check"
+               onchange="var t=this; document.querySelectorAll('#modal-host .item-check').forEach(function(c){ c.checked = t.checked; })">
+        <span class="ent-bolinha" aria-hidden="true"></span>
+        <span>Marcar todos</span>
+      </label>
+
+      <div class="ent-lista">
+        {% for item in itens %}
+        <label class="ent-linha">
+          <input type="checkbox" name="seqites" value="{{ item.seqite }}" class="item-check ent-check"
+                 onchange="document.getElementById('entrega-todos').checked = Array.prototype.every.call(document.querySelectorAll('#modal-host .item-check'), function(i){ return i.checked; })">
+          <span class="ent-bolinha" aria-hidden="true"></span>
+          <span class="ent-cod">{{ item.codpro2 }}</span>
+          <span class="ent-desc">{{ item.descricao }}</span>
+          <span class="ent-qtd">
+            <small>A entregar</small>
+            <strong>{{ item.qtd_atendida - item.qtd_movimentada }}</strong>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+
+      <div class="ent-botoes">
+        {% if recarregar %}
+        <a href="{{ url_for('painel') }}" class="ent-btn ent-btn-sec">Fechar</a>
+        {% else %}
+        <button type="button" class="ent-btn ent-btn-sec" data-fechar-modal>Cancelar</button>
+        {% endif %}
+        <button type="submit" class="ent-btn ent-btn-prim">Confirmar entrega</button>
+      </div>
+    </form>
+  {% else %}
+    <div class="ent-alerta">Nenhum item disponível para entrega.</div>
+    <div class="ent-botoes">
+      {% if recarregar %}
+      <a href="{{ url_for('painel') }}" class="ent-btn ent-btn-sec">Fechar</a>
+      {% else %}
+      <button type="button" class="ent-btn ent-btn-sec" data-fechar-modal>Voltar</button>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block entrega_confirmar %}
+<div class="ent-card" style="max-width:560px;">
+  <h1 class="ent-titulo">Confirmar entrega</h1>
+  <p class="ent-sub">Solicitação {{ numsol }} — confira os itens abaixo</p>
+
+  <table class="ent-tabela" style="margin-bottom:1.1rem;">
+    <thead>
+      <tr><th>Código</th><th>Descrição</th><th style="text-align:right;">Qtd.</th></tr>
+    </thead>
+    <tbody>
+      {% for item in itens %}
+      <tr>
+        <td>{{ item.codpro2 }}</td>
+        <td>{{ item.descricao }}</td>
+        <td class="col-qtd">{{ item.qtd_atendida - item.qtd_movimentada }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <form method="POST" action="{{ url_for('entrega_item', codemp=codemp, codfil=codfil, numsol=numsol) }}">
+    {% for item in itens %}<input type="hidden" name="seqites" value="{{ item.seqite }}">{% endfor %}
+    <input type="hidden" name="confirmar" value="1">
+    <div class="ent-botoes">
+      <a href="{{ url_for('entrega_item', codemp=codemp, codfil=codfil, numsol=numsol) }}" data-modal class="ent-btn ent-btn-sec">Voltar</a>
+      <button type="submit" class="ent-btn ent-btn-prim">Confirmar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block entrega_pergunta %}
+<div class="ent-card" style="max-width:520px;">
+  <h1 class="ent-titulo">Entrega concluída</h1>
+  <p class="ent-sub">Solicitação {{ numsol }} — O.S. {{ numped }}</p>
+  <p class="ent-nota">
+    Os itens conferidos foram entregues. Ainda há <strong>{{ abertos }}</strong> item(ns)
+    pendente(s) de conferência nesta solicitação.<br>
+    Deseja voltar a solicitação para <strong>Em separação</strong>?
+  </p>
+  <div class="ent-botoes">
+    <a href="{{ url_for('painel') }}" class="ent-btn ent-btn-sec">Não, manter em Atendido/parcial</a>
+    <form method="POST" action="{{ url_for('voltar_separacao', codemp=codemp, codfil=codfil, numsol=numsol) }}" style="flex:1; display:flex;">
+      <button type="submit" class="ent-btn ent-btn-prim" style="flex:1;">Sim, voltar para Em separação</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
