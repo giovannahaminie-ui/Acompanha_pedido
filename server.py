@@ -9,7 +9,7 @@ import threading
 import time
 from waitress import serve
 from app import app #importa a aplicação Flask do arquivo app.py
-from db import oracle_db
+from db import oracle_db, pedido_ws
 
 def _varredura_periodica(intervalo_seg=300):
     while True:
@@ -38,6 +38,10 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"AVISO: nao consegui pre-inicializar o Oracle no boot ({e}). "
               f"O servidor sobe mesmo assim.")
+
+    # Pré-carrega os WSDLs dos webservices numa thread à parte, sem atrasar
+    # o boot nem derrubá-lo se algum estiver fora do ar.
+    threading.Thread(target=pedido_ws.preaquecer_clientes, daemon=True).start()
 
     print(f"Acompanha pedido - Servindo em http://{host}:{port} com {threads} threads")
     serve(app, host=host, port=port, threads=threads)

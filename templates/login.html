@@ -1,40 +1,80 @@
 {% extends "base.html" %}
 {% block title %}Login{% endblock %}
 {% block content %}
-<div class="login-screen">
+<div class="lg2">
 
-  <div class="login-stage">
-    <div class="login-stage-copy">
-      <span class="login-eyebrow">Grupo Tiête</span>
-      <h1>Acompanhamento de solicitações de peças, em tempo real.</h1>
+  <section class="lg2-stage">
+    <img class="lg2-logo" src="{{ url_for('static', filename='img/Tiete 2022 logo nova com qualidae.png') }}" alt="Grupo Tiête">
+
+    <div class="lg2-copy">
+      <span class="lg2-traco"></span>
+      <h1>Acompanhamento de solicitações de peças, <span>em tempo real.</span></h1>
+      <p class="lg2-lead">Mais agilidade, controle e eficiência<br>para o seu dia a dia.</p>
+
+      <ul class="lg2-features">
+        <li>
+          <span class="lg2-feat-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg></span>
+          <span><strong>Acesso rápido</strong><small>nas solicitações</small></span>
+        </li>
+        <li>
+          <span class="lg2-feat-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"></path><polyline points="9 12 11 14 15 10"></polyline></svg></span>
+          <span><strong>Mais segurança</strong><small>nas informações</small></span>
+        </li>
+        <li>
+          <span class="lg2-feat-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="8" rx="1"></rect><rect x="10" y="7" width="4" height="13" rx="1"></rect><rect x="17" y="3" width="4" height="17" rx="1"></rect></svg></span>
+          <span><strong>Processos</strong><small>mais eficientes</small></span>
+        </li>
+      </ul>
     </div>
-  </div>
 
-  <aside class="login-sidebar">
-    <div class="login-sidebar-inner">
-      <img class="login-logo-mini" src="{{ url_for('static', filename='img/Tiete 2022 logo nova com qualidae.png') }}" alt="Grupo Tiête">
-      <p class="login-title">Entrar</p>
-      <p class="login-subtitle">Escaneie o crachá ou insira seu código</p>
+    <svg class="lg2-swoosh" viewBox="0 0 700 140" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 0 C140 90 330 138 700 140 L0 140 Z" fill="#0b114f"></path>
+      <path d="M0 0 C140 90 330 138 700 140" fill="none" stroke="#e0230b" stroke-width="5" vector-effect="non-scaling-stroke"></path>
+    </svg>
+  </section>
+
+  <aside class="lg2-side">
+    <div class="lg2-card">
+      <img class="lg2-card-logo" src="{{ url_for('static', filename='img/Tiete 2022 logo nova com qualidae.png') }}" alt="Grupo Tiête">
+
+      <h2>Bem-vindo!</h2>
+      <p class="lg2-card-sub">Faça login para continuar</p>
 
       {% if erro %}
-        <div class="login-alert">
+        <div class="lg2-alert">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
           {{ erro }}
         </div>
       {% endif %}
 
       <form method="POST">
-        <div class="login-field">
-          <label for="usuario">Código ou crachá</label>
-          <input type="text" id="usuario" name="usuario" placeholder="Escaneie o crachá" required autofocus autocomplete="off">
+        <div class="lg2-field">
+          <label for="usuario">Crachá</label>
+          <div class="lg2-input">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <input type="text" id="usuario" name="usuario" placeholder="Escaneie o crachá" required autofocus autocomplete="off">
+          </div>
         </div>
+
         <button type="submit" class="login-btn">
           Entrar
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
       </form>
+
+      <div class="lg2-rodape">
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"></path></svg> Grupo Tiête</span>
+        <small>Acesso Restrito</small>
+      </div>
     </div>
   </aside>
 
 </div>
+
+<script>
+  document.getElementById('lg2-olho').addEventListener('click', function () {
+    var campo = document.getElementById('senha');
+    campo.type = campo.type === 'password' ? 'text' : 'password';
+  });
+</script>
 {% endblock %}

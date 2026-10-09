@@ -5,6 +5,7 @@ Acesso ao Oracle (Sapiens). Querys estruturadas para o app Acompanha Pedido, tod
 
 import os
 import time
+import threading
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -17,6 +18,7 @@ ORACLE_CLIENT_LIB_DIR = os.environ.get("ORACLE_CLIENT_LIB_DIR") or None
 
 _oracle_client_iniciado = False
 _pool = None
+_pool_lock = threading.Lock()
 
 def get_connection():
     """
@@ -24,11 +26,19 @@ def get_connection():
     """
     global _oracle_client_iniciado, _pool
     import oracledb
-    if not _oracle_client_iniciado:
-        oracledb.init_oracle_client(lib_dir=ORACLE_CLIENT_LIB_DIR)
-        _oracle_client_iniciado = True
     if _pool is None:
-        _pool = oracledb.SessionPool(user=ORACLE_USER, password=ORACLE_PASSWORD, dsn=ORACLE_DSN, min=2, max=10, increment=1)
+        with _pool_lock:
+            if _pool is None:
+                if not _oracle_client_iniciado:
+                    oracledb.init_oracle_client(lib_dir=ORACLE_CLIENT_LIB_DIR)
+                    _oracle_client_iniciado = True
+                _pool = oracledb.SessionPool(
+                    user=ORACLE_USER, password=ORACLE_PASSWORD, dsn=ORACLE_DSN,
+                    min=2, max=10, increment=1,
+                    getmode=oracledb.POOL_GETMODE_TIMEDWAIT, wait_timeout=10000,  # ms: erro em vez de travar
+                    timeout=300,        # fecha sessão ociosa acima do mínimo após 5 min
+                    ping_interval=60,   # testa a sessão antes de entregar se ficou parada > 60 s
+                )
     return _pool.acquire()
 
 # ---------------------------------------------------------------------
@@ -120,7 +130,24 @@ SQL_SOLICITACOES = """
                         (SELECT MAX(nomusu) KEEP (DENSE_RANK FIRST ORDER BY LENGTH(nomusu) DESC)
                             FROM sapiens.E099USU nu WHERE nu.codusu = s.usu_ususep) AS nome_separador,
                         (SELECT MAX(nomusu) KEEP (DENSE_RANK FIRST ORDER BY LENGTH(nomusu) DESC)
-                            FROM sapiens.E099USU nu WHERE nu.codusu = s.usu_usucon) AS nome_retirado
+                            FROM sapiens.E099USU nu WHERE nu.codusu = s.usu_usucon) AS nome_retirado,
+                        CASE WHEN s.usu_sitsol = 4
+                              AND EXISTS (SELECT 1
+                            FROM sapiens.usu_t120sit it
+                                WHERE it.usu_codemp = s.usu_codemp
+                                AND it.usu_codfil = s.usu_codfil
+                                AND it.usu_numsol = s.usu_numsol
+                                AND NVL(it.usu_qtdate,0) > NVL(it.usu_qtdmov,0)
+                                AND NVL(it.usu_sitite,0) <> 3)
+                               THEN 1 ELSE 0 END AS tem_item_entrega,
+                        CASE WHEN s.usu_sitsol = 4
+                              AND EXISTS (SELECT 1
+                            FROM sapiens.usu_t120sit it2
+                                WHERE it2.usu_codemp = s.usu_codemp
+                                AND it2.usu_codfil = s.usu_codfil
+                                AND it2.usu_numsol = s.usu_numsol
+                                AND NVL(it2.usu_qtdabe,0) > 0)
+                             THEN 1 ELSE 0 END AS tem_item_aberto
                     FROM sapiens.usu_t120sdg s
                     JOIN sapiens.E120PED p ON p.codemp=s.usu_codemp
                     AND p.codfil= s.usu_codfil
@@ -187,7 +214,7 @@ def get_solicitacoes(empresa=None, filial=None, tipo_servico=None, etapa=None, n
         sql += " and s.usu_numsol = :numsol"
         binds["numsol"] = int(numsol)
 
-    sql += " ORDER BY s.usu_datsol"
+    sql += " ORDER BY TRUNC(s.usu_datsol) DESC, NVL(s.usu_horsol, 0) DESC, s.usu_numsol DESC"
 
     cur.execute(sql, **binds)
     cols = [c[0].lower() for c in cur.description]
@@ -230,14 +257,19 @@ def _classificar_por_etapa(rows):
             "solicitante": r["nome_solicitante"] or r["usu_ususol"],
             "separador": r["nome_separador"] or r["usu_ususep"],
             "retirado_por": r["nome_retirado"] or r["usu_usucon"],
+            "tem_item_entrega": bool(r["tem_item_entrega"]),
         }
         situacao = r["usu_sitsol"]
         if situacao in (1, 2):
             solicitados.append(item)
         elif situacao == 5:
-            em_separacao.append(item)
+            em_separacao.append({**item, "parcial": False})
         elif situacao == 4:
             atendidos.append(item)
+            # Atendido parcial: ainda tem item em aberto, então também aparece
+            # em "Em separação" (marcada como parcial -> amarela no painel).
+            if r["tem_item_aberto"]:
+                em_separacao.append({**item, "parcial": True})
     return {"solicitados": solicitados, "em_separacao": em_separacao, "atendidos": atendidos}
 
 
@@ -288,6 +320,8 @@ SQL_ITENS_SOLICITACAO = """
 """
 
 # Select de saldo de estoque - duas variações (empresas 1/2/12 e a 5):
+# O filtro por produto é feito direto na coluna (p.codpro / p.usu_codpro2),
+# um bloco por empresa, em vez de um CASE - o CASE impedia o uso de índice.
 SQL_SALDO_ESTOQUE_PADRAO = """
             SELECT CASE WHEN e.codemp=2 AND e.coddep='1' THEN 'RTL LD'
                 WHEN e.codemp=2 AND e.coddep='2' THEN 'RTL PP'
@@ -295,27 +329,40 @@ SQL_SALDO_ESTOQUE_PADRAO = """
                 WHEN e.codemp=1 AND e.coddep='3' THEN 'RET PP'
                 WHEN e.codemp=1 AND e.coddep='5' THEN 'CRAF'
                 WHEN e.codemp=12 AND e.coddep='1' THEN 'CAR' end as coddep,
-                (e.qtdest-e.qtdres-e.qtdrae) AS sldest
-            FROM sapiens.E210est e,sapiens.E075pro p
-                WHERE e.codemp in (1,2,12) AND coddep in ('1','2','3','5')
-                AND e.codpro=p.codpro
-                AND e.codemp=p.codemp
-                AND CASE WHEN p.codemp in (1,12) THEN p.codpro
-                WHEN p.codemp=2 THEN p.usu_codpro2 END =:codproint
-                AND NOT (e.coddep ='2'
-                AND e.codemp in (1,12))
-                AND NOT (e.coddep='3' and e.codemp=2)
+                e.sldest
+            FROM (
+                SELECT e.codemp, e.coddep, (e.qtdest-e.qtdres-e.qtdrae) AS sldest
+                FROM sapiens.E210est e
+                JOIN sapiens.E075pro p ON p.codemp = e.codemp AND p.codpro = e.codpro
+                WHERE e.codemp IN (1,12) AND e.coddep IN ('1','3','5')
+                AND p.codpro = :codproint
+                UNION ALL
+                SELECT e.codemp, e.coddep, (e.qtdest-e.qtdres-e.qtdrae) AS sldest
+                FROM sapiens.E210est e
+                JOIN sapiens.E075pro p ON p.codemp = e.codemp AND p.codpro = e.codpro
+                WHERE e.codemp = 2 AND e.coddep IN ('1','2','5')
+                AND p.usu_codpro2 = :codproint
+            ) e
 """
 
 SQL_SALDO_ESTOQUE_TRANSMISSOES = """
-select case when e.codemp=2 and e.coddep='1' then 'RTL LD'
-            when e.codemp=2 and e.coddep='2' then 'RTL PP'
-            when e.codemp=5 and e.coddep='1' then 'TRANS' end as coddep,
-(e.qtdest-e.qtdres-e.qtdrae) as sldest from sapiens.E210est e,sapiens.E075pro p
-where e.codemp in (2,5) AND coddep in ('1','2')
-and e.codpro=p.codpro and e.codemp=p.codemp and case when p.codemp=2 then p.codpro when p.codemp=5 then p.usu_codpro2 end =:codprofab
-and not (e.coddep='2' and e.codemp=5)
-
+            SELECT CASE WHEN e.codemp=2 AND e.coddep='1' THEN 'RTL LD'
+                WHEN e.codemp=2 AND e.coddep='2' THEN 'RTL PP'
+                WHEN e.codemp=5 AND e.coddep='1' THEN 'TRANS' END AS coddep,
+                e.sldest
+            FROM (
+                SELECT e.codemp, e.coddep, (e.qtdest-e.qtdres-e.qtdrae) AS sldest
+                FROM sapiens.E210est e
+                JOIN sapiens.E075pro p ON p.codemp = e.codemp AND p.codpro = e.codpro
+                WHERE e.codemp = 2 AND e.coddep IN ('1','2')
+                AND p.codpro = :codprofab
+                UNION ALL
+                SELECT e.codemp, e.coddep, (e.qtdest-e.qtdres-e.qtdrae) AS sldest
+                FROM sapiens.E210est e
+                JOIN sapiens.E075pro p ON p.codemp = e.codemp AND p.codpro = e.codpro
+                WHERE e.codemp = 5 AND e.coddep = '1'
+                AND p.usu_codpro2 = :codprofab
+            ) e
 """
 
 SQL_CLIENTE_PEDIDO = """
@@ -388,8 +435,11 @@ def _saldos_por_deposito(cur, codemp, codpro1, codpro2):
         for dep, sld in cur.fetchall() if sld and int(sld) > 0
     ]
 
-def get_solicitacao_detalhe(codemp, codfil, numsol):
-    """CabeÃ§alho + itens + saldo de estoque, para a segunda tela."""
+def get_solicitacao_detalhe(codemp, codfil, numsol, seqites_saldo=None):
+    """Cabeçalho + itens + saldo de estoque, para a segunda tela.
+    seqites_saldo: conjunto de seqite pra calcular o saldo por depósito (1
+    consulta por item). None = todos (comportamento padrão); set() = nenhum -
+    pras telas que não usam o saldo."""
     solicitacao = get_solicitacao_cabecalho(codemp, codfil, numsol)
 
     conn = get_connection()
@@ -408,7 +458,7 @@ def get_solicitacao_detalhe(codemp, codfil, numsol):
         # Item já cancelado (3) ou atendido (4, 6) - não busca saldo de
         # estoque, fica de consulta na tela (botões de ações escondidos
         # no template):
-        if sitite in (3, 4, 6):
+        if sitite in (3, 4, 6) or (seqites_saldo is not None and row["usu_seqite"] not in seqites_saldo):
             saldos = []
         else:
             saldos = _saldos_por_deposito(cur, codemp, codpro1, codpro2)
@@ -1347,11 +1397,18 @@ SQL_UPDATE_PEDIDO_OC = """
                     AND numped = :numped
 """
 
-def atualizar_pedido_com_oc(codemp, codfil, numped, numocp):
-    """Marca o pedido (E120PED) com o número da ordem de compra gerada."""
+def atualizar_pedido_com_oc(codemp, codfil, numped, numocp, numos=None, solicitante=None):
+    """Marca o pedido (E120PED) com o número da ordem de compra gerada,
+    mais a OS e o solicitante (quando informados)."""
+    partes = [f"Ordem de compra: {numocp}"]
+    if numos:
+        partes.append(f"OS {numos}")
+    if solicitante:
+        partes.append(f"Solicitante: {solicitante}")
+    obs_oc = " - ".join(partes)[:250]
+
     conn = get_connection()
     cur = conn.cursor()
-    obs_oc = f"Ordem de compra: {numocp}"
     cur.execute(SQL_UPDATE_PEDIDO_OC, {"obs_oc": obs_oc, "codemp": codemp, "codfil": codfil, "numped": numped})
     conn.commit()
     conn.close()
@@ -1579,15 +1636,21 @@ SQL_ESTORNAR_RESERVA_ITEM_PEDIDO = """
 """
 
 SQL_ZERAR_CONF_SOLICITACAO = """
-                UPDATE sapiens.USU_T120SDG
-                    SET usu_sitsol = 5,
-                        usu_datcon = NULL,
-                        usu_horcon = NULL,
-                        usu_usucon = NULL
-                WHERE usu_codemp = :codemp
-                AND usu_codfil = :codfil
-                AND usu_numsol = :numsol
-                AND usu_sitsol = 4
+                UPDATE sapiens.USU_T120SDG s
+                    SET s.usu_sitsol = 5,
+                        s.usu_datcon = NULL,
+                        s.usu_horcon = NULL,
+                        s.usu_usucon = NULL
+                WHERE s.usu_codemp = :codemp
+                AND s.usu_codfil = :codfil
+                AND s.usu_numsol = :numsol
+                AND s.usu_sitsol = 4
+                AND NOT EXISTS (SELECT 1 FROM sapiens.USU_T120SIT i
+                                WHERE i.usu_codemp = s.usu_codemp
+                                  AND i.usu_codfil = s.usu_codfil
+                                  AND i.usu_numsol = s.usu_numsol
+                                  AND NVL(i.usu_qtdate,0) > NVL(i.usu_qtdmov,0)
+                                  AND NVL(i.usu_sitite,0) <> 3)
 """
 
 def zerar_conferencia(codemp, codfil, numsol, seqites):
@@ -1745,6 +1808,93 @@ def finalizar_solicitacao_entregue(codemp, codfil, numsol, usuario):
     return afetadas > 0
 
 # ---------------------------------------------------------------------
+# Conferência parcial/total: se existe item conferido ainda não entregue
+# (usu_qtdate > usu_qtdmov), a solicitação vira Atendido (4) - mesmo que
+# ainda sobre item em aberto (nesse caso fica nas duas colunas do painel).
+# ---------------------------------------------------------------------
+SQL_MARCAR_ATENDIDO_PARCIAL = """
+                UPDATE sapiens.USU_T120SDG s
+                SET s.usu_sitsol = 4,
+                    s.usu_datcon = :datcon,
+                    s.usu_horcon = :horcon,
+                    s.usu_usucon = :usucon
+                WHERE s.usu_codemp = :codemp
+                  AND s.usu_codfil = :codfil
+                  AND s.usu_numsol = :numsol
+                  AND s.usu_sitsol IN (1, 2, 5)
+                  AND EXISTS (SELECT 1 FROM sapiens.USU_T120SIT i
+                              WHERE i.usu_codemp = s.usu_codemp
+                                AND i.usu_codfil = s.usu_codfil
+                                AND i.usu_numsol = s.usu_numsol
+                                AND NVL(i.usu_qtdate,0) > NVL(i.usu_qtdmov,0)
+                                AND NVL(i.usu_sitite,0) <> 3)
+"""
+
+def marcar_atendido_parcial(codemp, codfil, numsol, usuario):
+    conn = get_connection()
+    cur = conn.cursor()
+    agora = datetime.now()
+    cur.execute(
+        SQL_MARCAR_ATENDIDO_PARCIAL,
+        datcon=agora.date(), horcon=agora.hour * 60 + agora.minute,
+        usucon=int(usuario), codemp=codemp, codfil=codfil, numsol=numsol,
+    )
+    afetadas = cur.rowcount
+    conn.commit()
+    conn.close()
+    return afetadas > 0
+
+SQL_PENDENCIAS_SOLICITACAO = """
+                SELECT NVL(SUM(CASE WHEN NVL(usu_qtdabe,0) > 0 THEN 1 ELSE 0 END), 0),
+                       NVL(SUM(CASE WHEN NVL(usu_qtdate,0) > NVL(usu_qtdmov,0)
+                                     AND NVL(usu_sitite,0) <> 3 THEN 1 ELSE 0 END), 0)
+                FROM sapiens.USU_T120SIT
+                WHERE usu_codemp = :codemp
+                  AND usu_codfil = :codfil
+                  AND usu_numsol = :numsol
+"""
+
+def contar_pendencias(codemp, codfil, numsol):
+    """(itens em aberto/sem conferir, itens conferidos ainda sem entregar)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_PENDENCIAS_SOLICITACAO, codemp=codemp, codfil=codfil, numsol=numsol)
+    abertos, a_entregar = cur.fetchone()
+    conn.close()
+    return int(abertos), int(a_entregar)
+
+# Volta de Atendido (4) pra Em separação (5) - só se ainda há item em aberto
+# e nada conferido esperando entrega.
+SQL_VOLTAR_SEPARACAO = """
+                UPDATE sapiens.USU_T120SDG s
+                SET s.usu_sitsol = 5
+                WHERE s.usu_codemp = :codemp
+                  AND s.usu_codfil = :codfil
+                  AND s.usu_numsol = :numsol
+                  AND s.usu_sitsol = 4
+                  AND EXISTS (SELECT 1 FROM sapiens.USU_T120SIT i
+                              WHERE i.usu_codemp = s.usu_codemp
+                                AND i.usu_codfil = s.usu_codfil
+                                AND i.usu_numsol = s.usu_numsol
+                                AND NVL(i.usu_qtdabe,0) > 0)
+                  AND NOT EXISTS (SELECT 1 FROM sapiens.USU_T120SIT i
+                              WHERE i.usu_codemp = s.usu_codemp
+                                AND i.usu_codfil = s.usu_codfil
+                                AND i.usu_numsol = s.usu_numsol
+                                AND NVL(i.usu_qtdate,0) > NVL(i.usu_qtdmov,0)
+                                AND NVL(i.usu_sitite,0) <> 3)
+"""
+
+def voltar_para_separacao(codemp, codfil, numsol):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(SQL_VOLTAR_SEPARACAO, codemp=codemp, codfil=codfil, numsol=numsol)
+    afetadas = cur.rowcount
+    conn.commit()
+    conn.close()
+    return afetadas > 0
+
+# ---------------------------------------------------------------------
 # Depois de cancelar um item: se nao sobrou nenhum item em aberto
 # (usu_qtdabe > 0), a conferencia da solicitacao acabou (o que faltava
 # foi cancelado) - marca o cabecalho como Atendido (usu_sitsol=4) com
@@ -1866,4 +2016,5 @@ def get_filial_usuario(codusu):
     cur.execute(SQL_FILIAL_USUARIO, codusu=int(codusu))
     row = cur.fetchone()
     conn.close()
-    return row[0] if row and row [0] else None
+    valor = (row[0] or "").strip() if row else ""
+    return valor or None

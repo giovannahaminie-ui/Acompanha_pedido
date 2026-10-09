@@ -60,7 +60,7 @@ def injetar_perfil():
 # ---------------------------------------------------------------------
 # Autenticação / Tela de Login por CodUsuario (usuário do Sapiens)
 # ---------------------------------------------------------------------
-CODIGOS_LOGIN_DIRETO = {"675", "108", "131"}
+CODIGOS_LOGIN_DIRETO = {"675", "108", "131", "481"}
 def resolver_identificador(valor: str) -> str:
     """Recebe o que veio do campo de login / leitor de crachá e devolve o
     código de usuário do Sapiens a ser validado.
@@ -100,10 +100,13 @@ def logout():
 @login_obrigatorio
 def selecao():
     if request.method == "POST":
+        empresa = (request.form.get("empresa") or "").strip()
+        if not empresa:
+            return render_template("selecao.html", empresas=EMPRESAS, erro="Selecione uma empresa para continuar.")
         session["filtro"] = {
-        "empresa": request.form.get("empresa"),
-        "filial": oracle_db.get_filial_usuario(session["usuario"]),
-    }
+            "empresa": empresa,
+            "filial": oracle_db.get_filial_usuario(session["usuario"]),
+        }
         return redirect(url_for("painel"))
     return render_template(
         "selecao.html",
@@ -131,7 +134,7 @@ def _contexto_painel():
     )
 
     nome_empresa = dict(EMPRESAS).get(int(filtro["empresa"]), "")
-    nome_filial = dict(FILIAIS).get(filial) if filial else "todas as filiais"
+    nome_filial = dict(FILIAIS).get(filial, filial) if filial else "todas as filiais"
     contexto = f"Empresa {filtro['empresa']} — {nome_empresa}, {nome_filial}"
 
     tipos_servico = oracle_db.get_tipos_servico()
@@ -156,6 +159,7 @@ def _contexto_painel():
 
     return dict(
         contexto=contexto,
+        empresa_num=filtro["empresa"], empresa_nome=nome_empresa,
         solicitados=dados["solicitados"],
         em_separacao=dados["em_separacao"],
         atendidos=dados["atendidos"],
@@ -512,7 +516,7 @@ def conferencia_confirmar(codemp, codfil, numsol):
             erros.append(f"{p['codbar']}: falha ao conferir - {e}")
 
     if sucesso_count:
-        oracle_db.marcar_conferencia_concluida(codemp, codfil, numsol, session["usuario"])
+        oracle_db.marcar_atendido_parcial(codemp, codfil, numsol, session["usuario"])
 
     sucesso = f"{sucesso_count} item(ns) conferido(s) e reservado(s) com sucesso." if sucesso_count else None
     erro = " | ".join(erros) if erros else None
@@ -729,11 +733,20 @@ def trocar_item(codemp, codfil, numsol, seqite):
         mostrar_confirmacao=mostrar_confirmacao,
     )
 
-def _dados_e_sugestao_loja(codemp, codfil, item):
+def _dados_e_sugestao_loja(codemp, codfil, item, cache_filexe=None):
     """dados_pedido_loja + sugestão de quantidade (qtdest da loja + o que
     ainda falta pedir, descontando usu_qtdmso) pra UM item - reaproveitado
-    tanto na tela de revisão do lote quanto na gravação de cada item."""
-    filexe = oracle_db.get_filial_pedido(codemp, codfil, item["numped"])
+    tanto na tela de revisão do lote quanto na gravação de cada item.
+
+    cache_filexe: dict {numped: filexe} do request - os itens da mesma
+    solicitação costumam ser do mesmo pedido, então busca só uma vez."""
+    numped = item["numped"]
+    if cache_filexe is not None and numped in cache_filexe:
+        filexe = cache_filexe[numped]
+    else:
+        filexe = oracle_db.get_filial_pedido(codemp, codfil, numped)
+        if cache_filexe is not None:
+            cache_filexe[numped] = filexe
     dados_loja = oracle_db.dados_pedido_loja(codemp, filexe)
     if not dados_loja:
         return None, 0, 0
@@ -757,8 +770,9 @@ def pedido_loja_lote(codemp, codfil, numsol):
     if not seqites:
         return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
-    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol, seqites_saldo=set(seqites))
     itens_marcados = [i for i in detalhe["itens"] if i["seqite"] in seqites]
+    cache_filexe = {}
 
     if request.form.get("confirmar"):
         resultados = [None] * len(itens_marcados)
@@ -781,7 +795,7 @@ def pedido_loja_lote(codemp, codfil, numsol):
                 resultados[indice] = {"item": item, "sucesso": False, "mensagem": "Quantidade inválida."}
                 continue
 
-            dados_loja, _, qtdest_loja = _dados_e_sugestao_loja(codemp, codfil, item)
+            dados_loja, _, qtdest_loja = _dados_e_sugestao_loja(codemp, codfil, item, cache_filexe)
             if not dados_loja:
                 resultados[indice] = {"item": item, "sucesso": False, "mensagem": "Sem regra de pedido de loja pra essa empresa/filial."}
                 continue
@@ -846,9 +860,15 @@ def pedido_loja_lote(codemp, codfil, numsol):
                                 for _, item, qtd, preco, _ in itens_validos
                             ],
                                 numsol=numsol, numped=numped,
+                                numos=detalhe["solicitacao"]["numped"],
+                                solicitante=session["nome"],
                             )
                             if sucesso_oc:
-                                oracle_db.atualizar_pedido_com_oc(dados_loja["codemp_loja"], dados_loja["codfil_loja"], numped, numocp)
+                                oracle_db.atualizar_pedido_com_oc(
+                                    dados_loja["codemp_loja"], dados_loja["codfil_loja"], numped, numocp,
+                                    numos=detalhe["solicitacao"]["numped"],
+                                    solicitante=session["nome"],
+                                )
                                 oracle_db.atualizar_itens_solicitacao_com_oc(codemp, codfil, numsol, seqites_validos)
                                 oracle_db.desbloquear_pedido(dados_loja["codemp_loja"], dados_loja["codfil_loja"], numped)
                                 local_db.registrar_acao(
@@ -874,7 +894,7 @@ def pedido_loja_lote(codemp, codfil, numsol):
 
     itens_com_sugestao = []
     for item in itens_marcados:
-        _, qtd_sugerida, qtdest_loja = _dados_e_sugestao_loja(codemp, codfil, item)
+        _, qtd_sugerida, qtdest_loja = _dados_e_sugestao_loja(codemp, codfil, item, cache_filexe)
         itens_com_sugestao.append({
             **item, "qtd_sugerida": qtd_sugerida, "qtdest_loja": qtdest_loja, "sem_saldo": not item["saldos"],
         })
@@ -900,7 +920,7 @@ def solicitacao_compra_lote(codemp, codfil, numsol):
     if not seqites:
         return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
 
-    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol, seqites_saldo=set(seqites))
     itens_marcados = [i for i in detalhe["itens"] if i["seqite"] in seqites]
 
     if request.form.get("confirmar"):
@@ -993,7 +1013,7 @@ def solicitacao_compra_lote(codemp, codfil, numsol):
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/item/<int:seqite>/historico")
 @login_obrigatorio
 def historico_item(codemp, codfil, numsol, seqite):
-    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol, seqites_saldo=set())
     item = next((i for i in detalhe["itens"] if i["seqite"] == seqite), None)
     if not item:
         return redirect(url_for("detalhe_solicitacao", codemp=codemp, codfil=codfil, numsol=numsol))
@@ -1024,7 +1044,7 @@ def equivalentes_item(codemp, codfil, numsol, seqite, codpro):
 def historico_solicitacao(codemp, codfil, numsol):
     """Mostra o histórico de ações de uma solicitação."""
     acoes = local_db.listar_historico_por_solicitacao(codemp, codfil, numsol)
-    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol, seqites_saldo=set())
     return render_template(
         "historico.html",
         codemp=codemp, codfil=codfil, numsol=numsol,
@@ -1113,26 +1133,31 @@ def salvar_cracha():
         codigo_cracha = (str(item.get("codigo_cracha") or "")).strip()
         codusu = (str(item.get("codusu") or "")).strip()
         perfil = (str(item.get("perfil") or "")).strip()
-        if not codigo_cracha or not codusu:
-            erros.append(f"{codigo_cracha or '(sem código)'}: faltou o código do crachá ou do Sapiens.")
+        if not codusu:
+            erros.append(f"{codigo_cracha or '(sem crachá)'}: faltou o código do Sapiens.")
             continue
         dados = oracle_db.verificar_login(codusu)
         if not dados:
-            erros.append(f"{codigo_cracha}: código '{codusu}' não existe (ou está inativo) no Sapiens.")
+            erros.append(f"{codigo_cracha or codusu}: código '{codusu}' não existe (ou está inativo) no Sapiens.")
             continue
-        local_db.salvar_cracha(
-            codigo_cracha, dados["usuario"], dados["nome"], criado_por=session.get("usuario")
-        )
+        # Crachá é opcional - só vincula se foi informado.
+        if codigo_cracha:
+            local_db.salvar_cracha(
+                codigo_cracha, dados["usuario"], dados["nome"], criado_por=session.get("usuario")
+            )
         # Nível: só mexe se algo foi escolhido - "Não alterar" (vazio) preserva.
         if perfil in ("G", "B", "U", "__limpar__"):
             local_db.salvar_perfil(
                 dados["usuario"], "" if perfil == "__limpar__" else perfil, dados["nome"]
             )
+        elif not codigo_cracha:
+            erros.append(f"{dados['nome']} ({dados['usuario']}): sem crachá, escolha um nível de acesso.")
+            continue
         salvos.append(f"{dados['nome']} ({dados['usuario']})")
 
     ctx = {"crachas": local_db.listar_crachas()}
     if salvos:
-        ctx["sucesso"] = f"{len(salvos)} crachá(s) salvo(s): " + ", ".join(salvos)
+        ctx["sucesso"] = f"{len(salvos)} cadastro(s) salvo(s): " + ", ".join(salvos)
     if erros:
         ctx["erro"] = " | ".join(erros)
     return render_template("admin_crachas.html", **ctx)
@@ -1171,7 +1196,7 @@ def api_itens_entrega(codemp, codfil, numsol):
 @app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/entrega", methods=["GET", "POST"])
 @login_obrigatorio
 def entrega_item(codemp, codfil, numsol):
-    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
+    detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol, seqites_saldo=set())
     
     # Filtra apenas itens com saldo a entregar
     itens_entrega = [
@@ -1269,13 +1294,21 @@ def entrega_item(codemp, codfil, numsol):
         # Se a entrega completou a solicitação (nada em aberto e nada
         # conferido a entregar), marca como Entregue (usu_sitsol=6). Se
         # ainda sobrou item, o NOT EXISTS não bate e a situação continua 4.
+        finalizada = False
         if entregues:
-            oracle_db.finalizar_solicitacao_entregue(codemp, codfil, numsol, session["usuario"])
+            finalizada = oracle_db.finalizar_solicitacao_entregue(codemp, codfil, numsol, session["usuario"])
 
-        # Deu tudo certo - volta pro painel
+        # Deu tudo certo. Se não finalizou, entregou tudo que estava conferido
+        # e ainda sobra item em aberto: pergunta se volta pra Em separação.
         if not falhas:
+            if entregues and not finalizada:
+                abertos, a_entregar = oracle_db.contar_pendencias(codemp, codfil, numsol)
+                if abertos and not a_entregar:
+                    return render_template(
+                        "entrega_pergunta.html", codemp=codemp, codfil=codfil, numsol=numsol,
+                        numped=detalhe["solicitacao"]["numped"], abertos=abertos,
+                    )
             return redirect(url_for("painel"))
-
         # Alguns itens falharam: recarrega a tela mostrando o saldo real
         # (os que foram entregues já saem da lista) e o resumo do que faltou.
         detalhe = oracle_db.get_solicitacao_detalhe(codemp, codfil, numsol)
@@ -1294,6 +1327,18 @@ def entrega_item(codemp, codfil, numsol):
         "entrega_item.html", codemp=codemp, codfil=codfil, numsol=numsol,
         itens=itens_entrega, detalhe=detalhe
     )
+
+@app.route("/solicitacao/<int:codemp>/<int:codfil>/<int:numsol>/voltar-separacao", methods=["POST"])
+@login_obrigatorio
+def voltar_separacao(codemp, codfil, numsol):
+    """Resposta 'Sim' da pergunta no fim da entrega parcial."""
+    if oracle_db.voltar_para_separacao(codemp, codfil, numsol):
+        local_db.registrar_acao(
+            tipo_acao="voltou_separacao", usuario=session["usuario"],
+            codemp=codemp, codfil=codfil, numsol=numsol,
+            detalhes="Entrega parcial concluída - voltou para Em separação",
+        )
+    return redirect(url_for("painel"))
 
 @app.route("/pedido/<int:codemp>/<int:codfil>/<int:numped>/relatorio")
 @login_obrigatorio

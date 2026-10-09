@@ -8,9 +8,8 @@
          <div class="side-top">
       <div class="side-linha-contexto">
         <span class="side-contexto" title="{{ contexto }}">
-          <span class="live-dot"></span>
-          <span class="side-text">{{ contexto }}</span>
-        </span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="10" height="18" rx="1"></rect><path d="M14 9h5a1 1 0 0 1 1 1v11h-6"></path><line x1="8" y1="7" x2="10" y2="7"></line><line x1="8" y1="11" x2="10" y2="11"></line><line x1="8" y1="15" x2="10" y2="15"></line></svg>
+          <span class="side-text side-emp"><strong>Empresa {{ empresa_num }}</strong><small>{{ empresa_nome }}{% if filial_selecionada %} · {{ filial_nome }}{% endif %}</small></span>
         <a href="{{ url_for('selecao') }}" class="side-icone" title="Trocar seleção" aria-label="Trocar seleção">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
         </a>
@@ -28,17 +27,17 @@
       <form method="GET" id="form-filtros-painel" class="side-filtros">
 
         <div class="side-filtros-titulo">Filtros</div>
-        <div class="side-campo">
-          <label for="numped">O.S.</label>
-          <input type="text" id="numped" name="numped" class="input-compact" inputmode="numeric"
-                 placeholder="Núm. OS" value="{{ numped_selecionado or '' }}">
-        </div>
+          <div class="side-busca">
+            <input type="text" id="numped" name="numped" class="input-compact" inputmode="numeric"
+                   placeholder="Núm. OS" value="{{ numped_selecionado or '' }}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </div>
 
-        <div class="side-campo">
-          <label for="numsol">Solicitação</label>
-          <input type="text" id="numsol" name="numsol" class="input-compact" inputmode="numeric"
-                 placeholder="Núm. Solic." value="{{ numsol_selecionado or '' }}">
-        </div>
+          <div class="side-busca">
+            <input type="text" id="numsol" name="numsol" class="input-compact" inputmode="numeric"
+                   placeholder="Núm. Solic." value="{{ numsol_selecionado or '' }}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </div>
 
         <div class="side-campo">
           <label>Filial</label>
@@ -137,12 +136,22 @@
     </div>
   </aside>
 
-  <main class="painel-main">
-
-    <!-- ÁREA DAS COLUNAS -->
+    <main class="painel-main">
+    <div id="painel-bloco" class="painel-bloco">
     {% block grid %}
+    <header class="painel-topo">
+      <div>
+        <h1>Painel de Atendimentos e Filiais</h1>
+        <p>Acompanhe os atendimentos por status e filial</p>
+      </div>
+      <div class="painel-atualizacao">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        <span><small>Última atualização</small><strong>{{ data_hoje }} {{ hora_agora }}</strong></span>
+      </div>
+    </header>
+
     {% if somente_visualizacao %}
-    <div class="alert" style="margin:0 0 1rem;">
+    <div class="alert" style="margin:1rem 1rem 0;">
       Seu usuário ainda não tem um perfil de acesso definido, você pode consultar as solicitações, mas não interagir com elas.
     </div>
     {% endif %}
@@ -150,9 +159,10 @@
 
       {% if mostrar_solicitado %}
       <!-- COLUNA: SOLICITADO -->
-      <div class="painel-col">
+      <div class="painel-col tema-solicitado" data-status="solicitado">
         <div class="col-header col-solicitado">
-          <span class="col-title"><span class="col-dot"></span>Solicitado</span>
+          <span class="col-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"></rect><path d="M9 4h6v3H9z"></path><line x1="9" y1="11" x2="15" y2="11"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg></span>
+          <span class="col-title">Solicitado</span>
           <span class="count">{{ solicitados|length }}</span>
         </div>
         {% if solicitados %}
@@ -160,11 +170,11 @@
           <table class="{{ '' if somente_visualizacao else 'clickable' }}">
             <thead>
               <tr>
-                <th style="width:20%;">Data/hora</th>
-                <th style="width:12%;">Fil.</th>
+                <th style="width:22%;">Data/hora</th>
+                <th style="width:10%;">Fil.</th>
                 <th style="width:18%;">O.S.</th>
                 <th style="width:16%;">Solic.</th>
-                <th style="width:30%;">Solicitante</th>
+                <th style="width:34%;">Solicitante</th>
               </tr>
             </thead>
             <tbody>
@@ -172,13 +182,17 @@
               <tr {% if not somente_visualizacao %}ondblclick="assumirSolicitacao('{{ item.codemp }}','{{ item.codfil }}','{{ item.numsol }}')" title="Duplo clique para assumir"{% endif %}>
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
-                <td><span class="mono">{{ item.numped }}</span></td>
-                <td><span class="mono">{{ item.numsol }}</span></td>
+                <td><span class="mono num">{{ item.numped }}</span></td>
+                <td><span class="mono num">{{ item.numsol }}</span></td>
                 <td>{{ item.solicitante }}</td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
+        </div>
+        <div class="col-rodape">
+          <span class="col-total">Total de registros: {{ solicitados|length }}</span>
+          <nav class="col-paginas" aria-label="Páginas"></nav>
         </div>
         {% else %}
         <div class="empty-state">
@@ -191,36 +205,41 @@
 
       {% if mostrar_separacao %}
       <!-- COLUNA: EM SEPARAÇÃO -->
-      <div class="painel-col">
+      <div class="painel-col tema-separacao" data-status="separacao">
         <div class="col-header col-separacao">
-          <span class="col-title"><span class="col-dot"></span>Em separação</span>
+          <span class="col-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg></span>
+          <span class="col-title">Em separação</span>
           <span class="count">{{ em_separacao|length }}</span>
         </div>
         {% if em_separacao %}
         <div class="table-scroll">
           <table class="{{ '' if somente_visualizacao else 'clickable' }}">
             <thead>
-                <tr>
-                <th style="width:20%;">Data/hora</th>
-                <th style="width:14%;">Fil.</th>
+              <tr>
+                <th style="width:22%;">Data/hora</th>
+                <th style="width:10%;">Fil.</th>
                 <th style="width:18%;">O.S.</th>
-                <th style="width:17%;">Solic.</th>
+                <th style="width:16%;">Solic.</th>
                 <th style="width:34%;">Separador</th>
               </tr>
             </thead>
             <tbody>
               {% for item in em_separacao %}
-              <tr {% if not somente_visualizacao %}data-href="{{ url_for('detalhe_solicitacao', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol) }}"
-                  onclick="window.location.href=this.dataset.href" title="Ver detalhe da solicitação"{% endif %}>
+                <tr class="{{ 'linha-parcial' if item.parcial else '' }}" {% if not somente_visualizacao %}data-href="{{ url_for('detalhe_solicitacao', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol) }}"
+                  onclick="window.location.href=this.dataset.href" title="{{ 'Parcial: parte já conferida está em Atendido/parcial - abra a solicitação' if item.parcial else 'Ver detalhe da solicitação' }}"{% endif %}>
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
-                <td><span class="mono">{{ item.numped }}</span></td>
-                <td><span class="mono">{{ item.numsol }}</span></td>
+                <td><span class="mono num">{{ item.numped }}</span></td>
+                <td><span class="mono num">{{ item.numsol }}</span></td>
                 <td>{{ item.separador }}</td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
+        </div>
+        <div class="col-rodape">
+          <span class="col-total">Total de registros: {{ em_separacao|length }}</span>
+          <nav class="col-paginas" aria-label="Páginas"></nav>
         </div>
         {% else %}
         <div class="empty-state">
@@ -233,34 +252,39 @@
 
       {% if mostrar_atendido %}
       <!-- COLUNA: ATENDIDO -->
-      <div class="painel-col">
+      <div class="painel-col tema-atendido" data-status="atendido">
         <div class="col-header col-atendido">
-          <span class="col-title"><span class="col-dot"></span>Atendido / parcial</span>
+          <span class="col-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"></polyline></svg></span>
+          <span class="col-title">Atendido / parcial</span>
           <span class="count">{{ atendidos|length }}</span>
         </div>
         {% if atendidos %}
         <div class="table-scroll">
           <table>
             <thead>
-                <tr>
-                <th style="width:26%;">Data/hora</th>
-                <th style="width:18%;">Fil.</th>
-                <th style="width:32%;">O.S.</th>
-                <th style="width:32%;">Solic.</th>
+              <tr>
+                <th style="width:30%;">Data/hora</th>
+                <th style="width:14%;">Fil.</th>
+                <th style="width:28%;">O.S.</th>
+                <th style="width:28%;">Solic.</th>
               </tr>
             </thead>
             <tbody>
               {% for item in atendidos %}
-              <tr class="linha-atendida" data-codemp="{{ item.codemp }}" data-codfil="{{ item.codfil }}" data-numsol="{{ item.numsol }}"
-                {% if not somente_visualizacao %}onclick="window.location.href='{{ url_for('entrega_item', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol )}}'" style="cursor: pointer;" title="Clique para retirar itens"{% endif%}>
+              <tr class="linha-atendida{% if not somente_visualizacao %} linha-clicavel{% endif %}{% if item.tem_item_entrega %} linha-disponivel{% endif %}" data-codemp="{{ item.codemp }}" data-codfil="{{ item.codfil }}" data-numsol="{{ item.numsol }}"
+                  {% if not somente_visualizacao %}onclick="window.location.href='{{ url_for('entrega_item', codemp=item.codemp, codfil=item.codfil, numsol=item.numsol )}}'" title="Clique para retirar itens"{% endif %}>
                 <td><span class="mono">{{ item.data_hora }}</span></td>
                 <td>{{ item.codfil }}</td>
-                <td><span class="mono">{{ item.numped }}</span></td>
-                <td><span class="mono">{{ item.numsol }}</span></td>
+                <td><span class="mono num">{{ item.numped }}</span></td>
+                <td><span class="mono num">{{ item.numsol }}</span></td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
+        </div>
+        <div class="col-rodape">
+          <span class="col-total">Total de registros: {{ atendidos|length }}</span>
+          <nav class="col-paginas" aria-label="Páginas"></nav>
         </div>
         {% else %}
         <div class="empty-state">
@@ -273,7 +297,7 @@
 
     </div>
     {% endblock %}
-
+    </div>
   </main>
 </div>
 
@@ -369,49 +393,66 @@
     });
   });
 
-  // Destacar linhas "Atendido" que têm itens disponíveis (uma por vez, para não estourar conexões)
-  function iniciarVerificacaoAtendidos() {
-    const linhas = Array.from(document.querySelectorAll('.linha-atendida'));
+    // Paginação por coluna (no navegador): mostra POR_PAGINA linhas por vez e
+  // lembra a página de cada coluna entre as atualizações automáticas.
+  const POR_PAGINA = 15;
+  const paginaAtual = {};
 
-    function verificarLinha(index) {
-      if (index >= linhas.length) return;
-      const linha = linhas[index];
-      const codemp = linha.dataset.codemp;
-      const codfil = linha.dataset.codfil;
-      const numsol = linha.dataset.numsol;
-
-      fetch(`/api/solicitacao/${codemp}/${codfil}/${numsol}/itens-entrega`)
-        .then(response => response.json())
-        .then(data => {
-          if (data.itens && data.itens.length > 0) {
-            const temDisponivel = data.itens.some(item => (item.qtd_atendida - item.qtd_movi) > 0);
-            if (temDisponivel) {
-              linha.style.backgroundColor = '#dcfce7';
-            }
-          }
-        })
-        .catch(error => console.error('Erro ao verificar disponibilidade:', error))
-        .finally(() => verificarLinha(index + 1));
-    }
-
-    verificarLinha(0);
+  function numerosDaPagina(atual, total) {
+    if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1);
+    const ini = Math.max(1, Math.min(atual - 2, total - 4));
+    return Array.from({ length: 5 }, (_, i) => ini + i);
   }
-  document.addEventListener('DOMContentLoaded', iniciarVerificacaoAtendidos);
 
-  // Auto-refresh do painel (tempo real) - troca só o grid das 3 colunas,
-  // preserva os filtros atuais da URL. Não atualiza se o modal de entrega
-  // estiver aberto, pra não interromper o usuário no meio de uma ação.
-  const POLL_INTERVALO_MS = 10000;
+  function montarPaginacao() {
+    document.querySelectorAll('.painel-col[data-status]').forEach(function (col) {
+      const nav = col.querySelector('.col-paginas');
+      const linhas = Array.from(col.querySelectorAll('tbody tr'));
+      if (!nav || !linhas.length) return;
+      const chave = col.dataset.status;
+      const total = Math.max(1, Math.ceil(linhas.length / POR_PAGINA));
+
+      function ir(p) {
+        p = Math.min(Math.max(p, 1), total);
+        paginaAtual[chave] = p;
+        let visiveis = 0;
+        linhas.forEach(function (tr, i) {
+          const mostrar = i >= (p - 1) * POR_PAGINA && i < p * POR_PAGINA;
+          tr.hidden = !mostrar;
+          tr.classList.toggle('par', mostrar && (visiveis++ % 2 === 1));
+        });
+        nav.innerHTML = '';
+        function botao(txt, alvo, ativo, desabilitado) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'pg-btn' + (ativo ? ' ativo' : '');
+          b.textContent = txt;
+          b.disabled = !!desabilitado;
+          b.addEventListener('click', function (e) { e.stopPropagation(); ir(alvo); });
+          nav.appendChild(b);
+        }
+        botao('‹', p - 1, false, p === 1);
+        numerosDaPagina(p, total).forEach(function (n) { botao(String(n), n, n === p, false); });
+        botao('›', p + 1, false, p === total);
+      }
+      ir(paginaAtual[chave] || 1);
+    });
+  }
+  document.addEventListener('DOMContentLoaded', montarPaginacao);
+
+  // Auto-refresh do painel (tempo real) - troca o bloco inteiro (topo + 3
+  // colunas), preserva os filtros atuais da URL e a página de cada coluna.
+  const POLL_INTERVALO_MS = 20000;
   function atualizarPainel() {
     const params = new URLSearchParams(window.location.search);
     fetch('/painel/dados?' + params.toString())
       .then(r => r.text())
       .then(html => {
-        const grid = document.querySelector('.painel-grid');
-        if (grid) {
-          grid.outerHTML = html;
+        const bloco = document.getElementById('painel-bloco');
+        if (bloco) {
+          bloco.innerHTML = html;
           aplicarColunasGrid();
-          iniciarVerificacaoAtendidos();
+          montarPaginacao();
         }
       })
       .catch(err => console.error('Erro ao atualizar painel:', err));

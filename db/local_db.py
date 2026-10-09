@@ -10,6 +10,8 @@ Apenas a lógica de níveis de acesso (perfil) é local, para não depender do S
 """
 
 import sqlite3
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -119,14 +121,38 @@ def init_db():
     conn.commit()
     conn.close()
 
+_PERFIL_TTL_SEG = 60
+_perfil_cache = {}   # usuario -> (perfil, expira_em)
+_perfil_lock = threading.Lock()
+
+def _invalidar_perfil(usuario: str = None):
+    """Descarta o perfil guardado em memória (de um usuário ou de todos)."""
+    with _perfil_lock:
+        if usuario is None:
+            _perfil_cache.clear()
+        else:
+            _perfil_cache.pop(usuario, None)
+
 def get_perfil(usuario: str):
-    """Retorna 'G' / 'B' / 'U' ou None se o usuário não tem perfil atribuído."""
+    """Retorna 'G' / 'B' / 'U' ou None se o usuário não tem perfil atribuído.
+    Guardado em memória por _PERFIL_TTL_SEG - é lido em toda renderização
+    (menu/admin), então não vale abrir o SQLite a cada requisição."""
+    agora = time.time()
+    with _perfil_lock:
+        guardado = _perfil_cache.get(usuario)
+        if guardado and guardado[1] > agora:
+            return guardado[0]
+
     conn = get_conn()
     row = conn.execute(
         "SELECT perfil FROM usuarios_perfil WHERE usuario = ?", (usuario,)
     ).fetchone()
     conn.close()
-    return row["perfil"] if row and row["perfil"] else None
+    perfil = row["perfil"] if row and row["perfil"] else None
+
+    with _perfil_lock:
+        _perfil_cache[usuario] = (perfil, agora + _PERFIL_TTL_SEG)
+    return perfil
 
 def listar_usuarios_com_perfil(usuarios_sapiens):
     """
@@ -190,6 +216,7 @@ def salvar_perfil(usuario: str, perfil: str, nome: str = None):
     )
     conn.commit()
     conn.close()
+    _invalidar_perfil(usuario)
 
 
 # ===== HISTÓRICO DE AÇÕES =====

@@ -1,53 +1,60 @@
 {% extends "base.html" %}
 {% block title %}Seleção{% endblock %}
 {% block content %}
-<div class="login-screen">
+<div class="lg2">
 
-  <div class="login-stage">
-    <div class="login-stage-copy">
-      <span class="login-eyebrow">Filtros</span>
-      <h1>Bem-vindo(a) de volta, {{ (nome_usuario_logado or '').split()[0]|capitalize if nome_usuario_logado else '' }}!</h1>
-      <p class="login-lead">
-        Selecione a empresa que gostaria de visualizar. Você pode trocar essa seleção
-        quando quiser sem precisar logar de novo.
-      </p>
-      <div class="login-points">
-        <div class="login-point">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          Só a empresa é obrigatória, o resto é opcional.
-        </div>
-        <div class="login-point">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          Dá pra trocar o filtro a qualquer momento pelo botão "Trocar seleção"
-        </div>
-      </div>
+  <section class="lg2-stage">
+    <img class="lg2-logo" src="{{ url_for('static', filename='img/Tiete 2022 logo nova com qualidae.png') }}" alt="Grupo Tiête">
+
+    <div class="lg2-copy">
+      <span class="lg2-traco"></span>
+      <h1>Bem-vindo(a)!</h1>
+      <p class="lg2-lead">Para continuar, selecione a empresa<br>que deseja acessar.</p>
     </div>
-  </div>
 
-  <aside class="login-sidebar">
-    <div class="login-sidebar-inner">
-      <img class="login-logo-mini" src="{{ url_for('static', filename='img/Tiete 2022 logo nova com qualidae.png') }}" alt="Grupo Tiête">
-      <p class="login-title">Acompanhamento de solicitações</p>
-      <p class="login-subtitle">Selecione os parâmetros desejados para acessar o painel de solicitações.</p>
+    <svg class="lg2-swoosh" viewBox="0 0 700 140" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 0 C140 90 330 138 700 140 L0 140 Z" fill="#0b114f"></path>
+      <path d="M0 0 C140 90 330 138 700 140" fill="none" stroke="#e0230b" stroke-width="5" vector-effect="non-scaling-stroke"></path>
+    </svg>
+  </section>
 
-      <form method="POST">
-        <div class="login-field">
-          <label>Empresa</label>
-          <input type="hidden" name="empresa" id="empresa" value="{{ empresas[0][0] if empresas else '' }}">
-          <div class="ux-select-wrapper">
-            <div class="ux-select-trigger" id="empresa-trigger" tabindex="0">
-              <span class="ux-selected-text">
-                {% if empresas %}{{ empresas[0][0] }} — {{ empresas[0][1] }}{% else %}Selecione{% endif %}
-              </span>
-              <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-            <div class="ux-options-menu">
-              {% for cod, nome in empresas %}
-                <div class="ux-option-item {% if loop.first %}selected{% endif %}" data-value="{{ cod }}">{{ cod }} — {{ nome }}</div>
-              {% endfor %}
-            </div>
+  <aside class="lg2-side">
+    <div class="lg2-card">
+
+      {% if erro %}
+        <div class="lg2-alert">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>
+          {{ erro }}
+        </div>
+      {% endif %}
+
+      <form method="POST" id="form-empresa">
+        <div class="lg2-sel-topo">
+          <span class="lg2-sel-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="10" height="18" rx="1"></rect><path d="M14 9h5a1 1 0 0 1 1 1v11h-6"></path><line x1="8" y1="7" x2="10" y2="7"></line><line x1="8" y1="11" x2="10" y2="11"></line><line x1="8" y1="15" x2="10" y2="15"></line></svg>
+          </span>
+          <span class="lg2-sel-txt">
+            <strong>Empresa <b>*</b></strong>
+            <small>Selecione a empresa para acessar o painel de solicitações.</small>
+          </span>
+        </div>
+
+        <input type="hidden" name="empresa" id="empresa" value="">
+        <div class="ux-select-wrapper">
+          <div class="ux-select-trigger" id="empresa-trigger" tabindex="0">
+            <span class="lg2-sel-esq">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="10" height="18" rx="1"></rect><path d="M14 9h5a1 1 0 0 1 1 1v11h-6"></path></svg>
+              <span class="ux-selected-text">Selecione a empresa</span>
+            </span>
+            <svg class="ux-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="ux-options-menu">
+            {% for cod, nome in empresas %}
+              <div class="ux-option-item" data-value="{{ cod }}">{{ cod }} — {{ nome }}</div>
+            {% endfor %}
           </div>
         </div>
+        <p class="lg2-sel-erro" id="sel-erro" hidden>Selecione uma empresa para continuar.</p>
 
         <button type="submit" class="login-btn">
           Continuar
@@ -61,51 +68,44 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    const wrappers = document.querySelectorAll('.ux-select-wrapper');
+    const wrapper = document.querySelector('.ux-select-wrapper');
+    const trigger = wrapper.querySelector('.ux-select-trigger');
+    const options = Array.from(wrapper.querySelectorAll('.ux-option-item'));
+    const selectedText = wrapper.querySelector('.ux-selected-text');
+    const hiddenInput = document.getElementById('empresa');
+    const erro = document.getElementById('sel-erro');
 
-    wrappers.forEach(wrapper => {
-      const trigger = wrapper.querySelector('.ux-select-trigger');
-      const options = wrapper.querySelectorAll('.ux-option-item');
-      const selectedText = wrapper.querySelector('.ux-selected-text');
-      const hiddenInput = wrapper.parentElement.querySelector('input[type="hidden"]');
+    function escolher(opt) {
+      options.forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      selectedText.textContent = opt.textContent.trim();
+      hiddenInput.value = opt.getAttribute('data-value');
+      erro.hidden = true;
+    }
 
-      trigger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const isOpen = wrapper.classList.contains('open');
-        wrappers.forEach(w => w.classList.remove('open'));
-        if (!isOpen) wrapper.classList.add('open');
-      });
-
-      options.forEach(option => {
-        option.addEventListener('click', (e) => {
-          e.stopPropagation();
-          options.forEach(opt => opt.classList.remove('selected'));
-          option.classList.add('selected');
-          selectedText.textContent = option.textContent.trim();
-          hiddenInput.value = option.getAttribute('data-value');
-          wrapper.classList.remove('open');
-        });
-      });
-      trigger.addEventListener('keydown', (e) => {
-        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')return;
-        e.preventDefault();
-        const optsArray = Array.from(options);
-        let idx = optsArray.findIndex(opt => opt.classList.contains('selected'));
-        if (e.key === 'ArrowDown' && idx < optsArray.length - 1) idx++;
-        else if (e.key === 'ArrowUp' && idx > 0) idx--;
-        else return;
-        optsArray.forEach(opt => opt.classList.remove('selected'));
-        optsArray[idx].classList.add('selected');
-        selectedText.textContent = optsArray[idx].textContent.trim();
-        hiddenInput.value = optsArray[idx].getAttribute('data-value');
-      });
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      wrapper.classList.toggle('open');
     });
-
-    document.addEventListener('click', () => {
-      wrappers.forEach(wrapper => wrapper.classList.remove('open'));
-      
+    options.forEach(opt => opt.addEventListener('click', (e) => {
+      e.stopPropagation();
+      escolher(opt);
+      wrapper.classList.remove('open');
+    }));
+    trigger.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      let idx = options.findIndex(o => o.classList.contains('selected'));
+      if (e.key === 'ArrowDown') idx = Math.min(idx + 1, options.length - 1);
+      else idx = Math.max(idx - 1, 0);
+      escolher(options[idx]);
     });
-    document.getElementById('empresa-trigger').focus();
+    document.addEventListener('click', () => wrapper.classList.remove('open'));
+
+    document.getElementById('form-empresa').addEventListener('submit', (e) => {
+      if (!hiddenInput.value) { e.preventDefault(); erro.hidden = false; }
+    });
+    trigger.focus();
   });
 </script>
 {% endblock %}

@@ -14,6 +14,8 @@ foi montado e a resposta real do Sapiens. Além disso, cada par de envelopes (en
 import logging
 import os
 import re
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -34,6 +36,17 @@ _LOG_DIR.mkdir(exist_ok=True)
 
 _XML_DIR = _LOG_DIR / "xml"
 _XML_DIR.mkdir(exist_ok=True)
+WS_SALVAR_XML = os.environ.get("WS_SALVAR_XML", "S").strip().upper() != "N"
+WS_XML_DIAS = int(os.environ.get("WS_XML_DIAS", "30"))
+
+def _limpar_xml_antigos():
+    limite = time.time() - WS_XML_DIAS * 86400
+    for arquivo in _XML_DIR.glob("*.xml"):
+        try:
+            if arquivo.stat().st_mtime < limite:
+                arquivo.unlink()
+        except OSError:
+            pass
 
 logger = logging.getLogger("pedido_ws")
 logger.setLevel(logging.INFO)
@@ -58,8 +71,38 @@ def _fmt_numero(valor):
 #   Cache dos clientes zeep, para ser otmizado o webservice 
 #   na ação de trocar item.
 # ---------------------------------------------------------------------
-
+_ws_clients_lock = threading.Lock()
 _ws_clients = {}
+
+class _HistoricoPorThread:
+    """Igual ao HistoryPlugin do zeep (mesmos last_sent/last_received), mas
+    guarda o último envelope por thread - o HistoryPlugin tem um buffer só,
+    compartilhado, e duas chamadas simultâneas misturavam os logs."""
+
+    def __init__(self):
+        self._local = threading.local()
+
+    def egress(self, envelope, http_headers, operation, binding_options):
+        self._local.sent = {"envelope": envelope, "http_headers": http_headers}
+        return envelope, http_headers
+
+    def ingress(self, envelope, http_headers, operation):
+        self._local.received = {"envelope": envelope, "http_headers": http_headers}
+        return envelope, http_headers
+
+    @property
+    def last_sent(self):
+        try:
+            return self._local.sent
+        except AttributeError:
+            raise IndexError("sem envelope enviado")
+
+    @property
+    def last_received(self):
+        try:
+            return self._local.received
+        except AttributeError:
+            raise IndexError("sem envelope recebido")
 
 def _corrigir_endereco_servico(client, wsdl):
     """O WSDL do Sapiens anuncia o serviço com o IP público do servidor
@@ -86,12 +129,24 @@ def _corrigir_endereco_servico(client, wsdl):
 def _client_para(wsdl):
     cached = _ws_clients.get(wsdl)
     if cached is None:
-        import zeep
-        from zeep.plugins import HistoryPlugin
-        history = HistoryPlugin()
-        client = zeep.Client(wsdl, plugins=[history])
-        _corrigir_endereco_servico(client, wsdl)
-        _ws_clients[wsdl]= cached = (client, history)
+        with _ws_clients_lock:
+            cached = _ws_clients.get(wsdl)
+            if cached is None:
+                import requests
+                import zeep
+                from zeep.cache import SqliteCache
+                from zeep.transports import Transport
+
+                transport = Transport(
+                    session=requests.Session(),
+                    cache=SqliteCache(path=str(_LOG_DIR.parent / "wsdl_cache.db"), timeout=86400),
+                    timeout=20,            # segundos - baixar o WSDL
+                    operation_timeout=60,  # segundos - cada chamada ao webservice
+                )
+                history = _HistoricoPorThread()
+                client = zeep.Client(wsdl, transport=transport, plugins=[history])
+                _corrigir_endereco_servico(client, wsdl)
+                _ws_clients[wsdl] = cached = (client, history)
     return cached
 
 def _get_client():
@@ -125,24 +180,23 @@ def _ultima_transacao(history):
 
 def _log_envelopes(history, operacao):
     last_sent, last_received = _ultima_transacao(history)
+    xml_enviado = _envelope_para_texto(last_sent)
+    xml_recebido = _envelope_para_texto(last_received)
     logger.info(
         "%s - enviado:\n%s\n%s - recebido:\n%s",
-        operacao, _envelope_para_texto(last_sent),
-        operacao, _envelope_para_texto(last_received),
+        operacao, xml_enviado, operacao, xml_recebido,
     )
-    _salvar_xml_arquivos(last_sent, last_received, operacao)
+    if WS_SALVAR_XML:
+        _salvar_xml_arquivos(xml_enviado, xml_recebido, operacao)
 
-def _salvar_xml_arquivos(last_sent, last_received, operacao):
+def _salvar_xml_arquivos(xml_enviado, xml_recebido, operacao):
     """Salva o envelope enviado e o recebido como arquivos .xml separados em
     logs/xml/ (um par por chamada, nomeado com timestamp + operação) - além
     do log de texto único (_log_envelopes), pra poder abrir cada retorno
     isolado (ex: num editor de XML) sem procurar dentro do log grande."""
-
     agora = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    for sufixo, entrada in (("enviado", last_sent), ("recebido", last_received)):
-        xml = _envelope_para_texto(entrada)
-        caminho = _XML_DIR / f"{agora}_{operacao}_{sufixo}.xml"
-        caminho.write_text(xml, encoding="utf-8")
+    for sufixo, xml in (("enviado", xml_enviado), ("recebido", xml_recebido)):
+        (_XML_DIR / f"{agora}_{operacao}_{sufixo}.xml").write_text(xml, encoding="utf-8")
 
 def _chamar_gravar_pedidos(pedidos, operacao, ignorar_pedido_bloqueado=False):
     """`ignorar_pedido_bloqueado` pula a consideração de análise de crédito
@@ -397,9 +451,13 @@ def _get_client_oc():
         )
     return _client_para(OC_WS_WSDL)
 
-def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped, coddep=None):
+def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped, coddep=None, numos=None, solicitante=None):
     """itens: lista de dicts {codpro, qtd, preco}.
     Retorna (numocp, sucesso, mensagem)."""
+    partes = [f"OS {numos}" if numos else None, f"Solicitação {numsol}", f"Pedido {numped}"]
+    if solicitante:
+        partes.append(f"Solicitante: {solicitante}")
+    obs_ocp = " - ".join(p for p in partes if p)[:250]
     client, history = _get_client_oc()
     try:
         resposta = client.service.GravarOrdensCompra_5(
@@ -413,7 +471,7 @@ def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped, coddep=No
                     "codFor": cod_for,
                     "tipoProcessamento": 1,
                     "tnsPro": "90403",
-                    "obsOcp": f"Solicitação {numsol} - Pedido {numped}",
+                    "obsOcp": obs_ocp,
                     "produtos": [
                         {
                             "codPro": item["codpro"],
@@ -454,7 +512,6 @@ ESTOQUE_WS_PASSWORD = os.environ.get("ESTOQUE_WS_PASSWORD", "")
 
 def _get_client_estoque():
     """Cliente SOAP para webservice de estoque."""
-    from zeep.plugins import HistoryPlugin
     
     if not (ESTOQUE_WS_WSDL and ESTOQUE_WS_USER and ESTOQUE_WS_PASSWORD):
         raise PedidoWebserviceError(
@@ -593,3 +650,20 @@ def gerar_relatorio_pedido(codemp, codfil, numped):
 
     import base64
     return base64.b64decode(resposta.prRetorno)
+
+def preaquecer_clientes():
+    """Carrega o WSDL de cada webservice configurado no .env, pra primeira
+    chamada de verdade já encontrar o cliente pronto. Erros não derrubam
+    o boot - a chamada normal tenta de novo (e mostra o erro) depois."""
+    _limpar_xml_antigos()
+    for nome, wsdl in (
+        ("pedido", PEDIDO_WS_WSDL), ("compra", COMPRA_WS_WSDL), ("oc", OC_WS_WSDL),
+        ("estoque", ESTOQUE_WS_WSDL), ("relatorio", RELATORIO_WS_WSDL),
+    ):
+        if not wsdl:
+            continue
+        try:
+            _client_para(wsdl)
+            print(f"[ws] cliente '{nome}' pronto.")
+        except Exception as e:
+            print(f"[ws] AVISO: não consegui pré-carregar '{nome}': {e}")

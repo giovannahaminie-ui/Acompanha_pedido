@@ -13,7 +13,7 @@
     <div class="lote-corpo">
       <div class="lote-destaque">
         <span class="lote-destaque-rotulo">Número do pedido</span>
-        <span class="lote-destaque-valor">{% for r in resultados %}{% if r.sucesso and r.numped %}{{ r.numped }}{% endif %}{% endfor %}</span>
+        <span class="lote-destaque-valor">{% set peds = resultados|selectattr('sucesso')|map(attribute='numped')|unique|list %}{{ peds|join(' / ') }}</span>
       </div>
 
       <div class="lote-resumo">

@@ -42,7 +42,7 @@
         <p class="section-title">Novo crachá</p>
         <div class="adm-form-linha">
           <div class="field">
-            <label for="in-codigo">Passe o crachá no leitor</label>
+            <label for="in-codigo">Passe o crachá no leitor (opcional)</label>
             <input type="text" id="in-codigo" placeholder="Encoste o cursor aqui e passe o crachá" autocomplete="off" autofocus>
           </div>
           <div class="field">
@@ -82,7 +82,7 @@
             </thead>
             <tbody id="lista-novo">
               <tr id="vazio-novo"><td colspan="4" class="note" style="text-align:center; padding:1.4rem;">
-                Nenhum crachá na lista. Passe um crachá, informe o código do Sapiens e clique em "Adicionar à lista".
+                Nenhum cadastro na lista. Informe o código do Sapiens (e o crachá, se tiver) e clique em "Adicionar à lista".
               </td></tr>
             </tbody>
           </table>
@@ -258,12 +258,14 @@
 
   document.getElementById('btn-adicionar').addEventListener('click', adicionar);
 
-  function adicionar() {
+    function adicionar() {
     addErro.style.display = 'none';
-    const codigo = inCodigo.value.trim();
+    const codigo = inCodigo.value.trim();   // opcional
     const codusu = inCodusu.value.trim();
-    if (!codigo || !codusu) { erroAdd('Passe o crachá e informe o código do Sapiens.'); return; }
-    if (itens.some(i => i.codigo_cracha === codigo)) { erroAdd('Esse código de crachá já está na lista.'); return; }
+    if (!codusu) { erroAdd('Informe o código do Sapiens.'); return; }
+    if (!codigo && !inPerfil.value) { erroAdd('Sem crachá, escolha um nível de acesso.'); return; }
+    if (codigo && itens.some(i => i.codigo_cracha === codigo)) { erroAdd('Esse código de crachá já está na lista.'); return; }
+    if (!codigo && itens.some(i => !i.codigo_cracha && i.codusu === codusu)) { erroAdd('Essa pessoa já está na lista (sem crachá).'); return; }
 
     const inserir = (nome) => {
       itens.push({ codigo_cracha: codigo, codusu: codusu, nome: nome || ('código ' + codusu), perfil: inPerfil.value });
@@ -291,7 +293,7 @@
         '<td><input type="checkbox" class="chk-novo"></td>' +
         '<td>' + esc(it.nome) + ' <span class="user-code">cód. ' + esc(it.codusu) + '</span></td>' +
         '<td>' + esc(NIVEIS[it.perfil] !== undefined ? NIVEIS[it.perfil] : it.perfil) + '</td>' +
-        '<td><code>' + esc(it.codigo_cracha) + '</code></td>';
+        '<td>' + (it.codigo_cracha ? '<code>' + esc(it.codigo_cracha) + '</code>' : '<span class="note">sem crachá</span>') + '</td>';
       tr.querySelector('.chk-novo').addEventListener('change', sincronizarNovo);
       corpo.appendChild(tr);
     });
