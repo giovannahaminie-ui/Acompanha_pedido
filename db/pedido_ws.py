@@ -324,7 +324,7 @@ def incluir_itens_pedido_loja(codemp_loja, codfil_loja, codcli, itens, tns_pro, 
         "produto": [
             {
                 "opeExe": "I",
-                "codPro": item["codpro"], "qtdPed": _fmt_numero(item["qtd"]), "preUni": _fmt_numero(item["preco"]),
+                "codPro": item["codpro"], "qtdPed": _fmt_numero(item["qtd"]),
                 "tnsPro": tns_pro, "resEst": "S",
                 "usuGer": str(usuario),
             }
@@ -465,6 +465,7 @@ def gerar_ordem_compra(codemp, codfil, cod_for, itens, numsol, numped, coddep=No
             parameters={
                 "tipoProcessamento": 1,
                 "identificadorSistema": "INTEGRADO",
+                "fechaOC": "1",
                 "dadosGerais": [{
                     "codEmp": codemp,
                     "codFil": codfil,
