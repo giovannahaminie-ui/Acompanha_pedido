@@ -197,22 +197,7 @@ mesmo com `qtdest=0` (diferente do Pedido na loja, que já bloqueia isso).
 
 ## 6. Webservices (`db/pedido_ws.py`)
 
-Todo envelope (enviado/recebido) é logado em `logs/pedido_ws_envelopes.log`
-e salvo separado em `logs/xml/` (nomeado com timestamp + operação).
-
-**`GravarPedidos_15`** (Inserir peça, Trocar item, Pedido na loja):
-- `opeExe`: `"I"` = incluir, `"A"` = alterar. Pedido normalmente `"A"`
-  (já existe), exceto Pedido na loja (`"I"`, sempre novo). Produto `"I"`
-  pra item novo, `"A"` pra alterar/cancelar existente (via `seqIpd`).
-- `qtdPed`/`qtdCan`/`preUni` são `xs:string` — exige vírgula decimal
-  (`"384,41"`), não ponto (`_fmt_numero`).
-- `erroExecucao` vazio **não** significa sucesso — o sucesso real está em
-  `respostaPedido.tipRet == 1`. Erro de negócio às vezes só aparece em
-  `gridPro.retorno` (por item), não no `msgRet` do pedido.
-- `ignorarPedidoBloqueado="S"` só é usado no Pedido na loja (ver 5.5).
-
-**`GerarSolicitacaoCompra_3`** (Solicitação de compra) — ainda não
-funciona, ver 5.6.
+- Todos os Webservices são configurados e chamados no arquivo pedido_ws, envelope, retorno, erro, sucesso.
 
 ## 7. Stack técnica
 
@@ -226,56 +211,6 @@ funciona, ver 5.6.
   recarrega sozinho** quando um arquivo muda, precisa reiniciar o processo
   manualmente depois de qualquer deploy.
 
-## 8. Pontos em aberto
+## 8. Serviços e Arquivos:
 
-- **Restringir ações por perfil** — hoje qualquer usuário logado executa
-  tudo (ver seção 3).
-
-- **Definir quem/como registra "Atendido/parcial"** fora da Conferência com
-  reserva — se ela substitui essa pendência ou se ainda falta algo.
-  DDL: `ALTER TABLE sapiens.usu_t120sit ADD usu_obsite VARCHAR2(250);`
-
-- `SQL_PRODUTO_ATIVO_PRECO` traz uma regra de depósito por `codfil`
-  (`10`/`1001`→`3`, senão `1`) que não é usada em lugar nenhum — avaliar se
-  vale remover.
-
-- **Crachá com código de barras (Code128, 10 dígitos)** — em discussão, nada
-  implementado. O código não é o `codusu` do Sapiens direto, precisa de
-  tabela de-para (crachá → `codusu`) que ainda não existe — local (SQLite)
-  ou importada de outro sistema, a definir.
-
-## 9. Estrutura
-
-```
-acompanha_pedido/
-  app.py                  # rotas Flask
-  requirements.txt
-  .env                     # credenciais do Oracle + dos 2 webservices + chave do Flask (não versionado)
-  .gitignore
-  logs/
-    pedido_ws_envelopes.log
-    xml/
-  db/
-    local_db.py            # SQLite - perfis (G/B/U)
-    oracle_db.py            # queries do Sapiens
-    pedido_ws.py            # cliente SOAP - GravarPedidos + GerarSolicitacaoCompra
-  templates/
-    base.html
-    login.html
-    selecao.html
-    painel.html
-    detalhe_solicitacao.html
-    assumir_solicitacao.html
-    observacao_item.html
-    cancelar_item.html
-    inserir_item.html
-    trocar_item.html
-    equivalentes_item.html
-    admin_perfis.html
-    pedido_loja_lote.html
-    solicitacao_compra_lote.html
-    conferencia_reserva.html
-    historico_item.html          
-  static/
-    css/style.css
-```
+- Hoje a tela roda no servidor 231, através de um serviço NSSM, configurado. E o arquivo se chama Acompanha_pedido.
